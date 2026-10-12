@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sunomv — stop-motion music videos from a Suno song</title>
-<meta name="description" content="Turn a Suno song, its lyrics and cover into a beat-synced, paper cut-out stop-motion music video. Codex keyframes, Wan 2.2 on Vast.ai, continuous takes instead of a slideshow.">
+<meta name="description" content="Turn a Suno song, its lyrics and cover into a beat-synced, paper cut-out stop-motion music video, in 16:9 or 9:16.">
 <meta property="og:title" content="sunomv — every beat is a frame">
 <meta property="og:description" content="Beat-synced stop-motion music videos from a Suno song, its lyrics and cover art.">
 <meta property="og:image" content="assets/poster.jpg">
@@ -122,13 +122,10 @@
   <div class="wrap">
     <a class="logo" href="#"><i></i>sunomv</a>
     <div class="links">
-      <a href="#how">How it works</a>
+      <a href="#what">What it does</a>
       <a href="#continuity">Continuous takes</a>
       <a href="#studio">Studio</a>
-      <a href="#vast">Cost</a>
-      <a href="#start">Get started</a>
     </div>
-    <a class="btn" href="https://github.com/jash90/suno-audio-wideo">GitHub</a>
   </div>
 </nav>
 
@@ -138,44 +135,44 @@
       <div>
         <div class="eyebrow">Suno song → stop-motion music video</div>
         <h1 style="margin-top:22px">Every beat<br><em>is a frame.</em></h1>
-        <p class="lead">Drop in a song made with Suno, its lyrics and cover, and a few words about the style.
-          sunomv plans the shots on the beat grid, draws every scene, animates it and assembles a paper cut-out,
-          frame-by-frame music video in 16:9 or 9:16.</p>
+        <p class="lead">Bring a song made with Suno, its lyrics, its cover and a few words about the look you want.
+          sunomv turns it into a hand-made-looking, frame-by-frame music video that moves with the music,
+          in 16:9 or 9:16.</p>
         <div class="ctas">
-          <a class="btn primary" href="#start">Get started</a>
-          <a class="btn" href="#continuity">See the continuous takes</a>
+          <a class="btn primary" href="#continuity">Watch the takes</a>
+          <a class="btn" href="#studio">See the studio</a>
         </div>
       </div>
       <div>
         <div class="player">
           <video src="assets/excerpt-chorus.mp4" poster="assets/poster.jpg" controls playsinline preload="metadata"></video>
         </div>
-        <div class="caption">“Where the Silence Hurts”, first chorus: five shots (s09–s13) in one continuous take, no cut. Generated end to end by sunomv.</div>
+        <div class="caption">“Where the Silence Hurts”, first chorus: five shots, one continuous take, no cut.</div>
       </div>
     </div>
 
     <div class="stats">
-      <div class="stat"><b>45</b><span>shots, cut on downbeats</span></div>
-      <div class="stat"><b>9</b><span>hard cuts; 36 continuous transitions</span></div>
-      <div class="stat"><b>~50 min</b><span>clips + render on one RTX 4090</span></div>
-      <div class="stat"><b>~$0.67</b><span>GPU cost for a 4:29 song</span></div>
+      <div class="stat"><b>45</b><span>shots, all on the beat</span></div>
+      <div class="stat"><b>9</b><span>cuts; everything else flows</span></div>
+      <div class="stat"><b>&lt; 1 h</b><span>to render a 4½-minute song</span></div>
+      <div class="stat"><b>&lt; $1</b><span>of compute per video</span></div>
     </div>
   </div>
 </header>
 
-<section id="how">
+<section id="what">
   <div class="wrap">
     <div class="head">
-      <div><div class="eyebrow">How it works</div><h2 style="margin-top:14px">From waveform<br>to <em>finished cut</em>.</h2></div>
-      <p>Five stages, each one visible and editable in the studio. Music and lyrics drive the timing, a language
-        model directs, image models draw, and rented GPUs do the heavy animation.</p>
+      <div><div class="eyebrow">What it does</div><h2 style="margin-top:14px">From a song<br>to <em>a finished film</em>.</h2></div>
+      <p>You bring the music and the mood. sunomv takes care of the timing, the story, the pictures and the edit,
+        and keeps every step open for you to adjust.</p>
     </div>
     <div class="steps">
-      <div class="step"><h3>Listen</h3><p>Stems with Demucs, beats and downbeats with beat_this, word-level lyric timing with Whisper. Sections come from Suno's <code>[Verse]</code> / <code>[Chorus]</code> tags.</p><div class="where">Mac · or Vast GPU</div></div>
-      <div class="step"><h3>Direct</h3><p>Two bars per shot. A director (Claude Code, structured output) writes each shot's scene and motion from the lyrics, the cover art and your style.</p><div class="where">local</div></div>
-      <div class="step"><h3>Draw</h3><p>One complete picture per shot, background and character together, from a character sheet and the cover. Made with the Codex image tool; ComfyUI Z-Image is the alternative.</p><div class="where">local · Codex</div></div>
-      <div class="step"><h3>Animate</h3><p>Wan 2.2 14B image-to-video with 4-step LoRAs. Continuous shots are conditioned on their first <em>and</em> last frame.</p><div class="where">Vast.ai · CUDA</div></div>
-      <div class="step"><h3>Cut</h3><p>Stop-motion stepping on twos with a forced new drawing on every beat, a downbeat camera pulse, karaoke captions. H.264 master and a small HEVC preview.</p><div class="where">Vast GPU · NVENC</div></div>
+      <div class="step"><h3>Listen</h3><p>Finds the tempo, the bars, the verses and choruses, and the moment every word is sung.</p></div>
+      <div class="step"><h3>Direct</h3><p>Writes a shot list that tells the story of the lyrics, in the style you asked for.</p></div>
+      <div class="step"><h3>Draw</h3><p>Paints every scene as one complete picture, with the same main character from start to end.</p></div>
+      <div class="step"><h3>Animate</h3><p>Brings each scene to life, with motion that suits the section of the song.</p></div>
+      <div class="step"><h3>Cut</h3><p>Stop-motion timing locked to the beat, karaoke captions, and a ready-to-post video in 16:9 or 9:16.</p></div>
     </div>
   </div>
 </section>
@@ -184,46 +181,40 @@
   <div class="wrap">
     <div class="head">
       <div><div class="eyebrow">Continuous takes</div><h2 style="margin-top:14px">Not a slideshow<br>of <em>45 pictures</em>.</h2></div>
-      <p>The first version cut on every shot and felt like flipping through illustrations. Now the video cuts only when
-        the song enters a verse, chorus, bridge, breakdown or outro. In between, each clip ends exactly where the next
-        one begins.</p>
+      <p>The video cuts only where the song changes, for example into a chorus or a bridge. In between, one shot
+        flows into the next: the same place, the same light, the same character, with the camera and the story
+        moving on.</p>
     </div>
 
     <div class="split">
       <div class="card">
-        <img src="assets/keyframe-chain.jpg" alt="Six consecutive keyframes s09 to s14 in the same dark room">
+        <img src="assets/keyframe-chain.jpg" alt="Six consecutive scenes from one continuous take in the same dark room">
         <div class="body">
-          <h3>Keyframes drawn from each other</h3>
-          <p>s09 to s14 are one take: a wide shot of the room, closer and closer on the woman at the window, then the
-            camera pulls back out through the rain. Each keyframe is generated with the previous one attached, so
-            the place, light and character stay the same.</p>
+          <h3>One take, six shots</h3>
+          <p>A wide shot of the room, closer and closer on the woman at the window, then the camera pulls back out
+            into the rain, all in one continuous take.</p>
         </div>
       </div>
       <div>
-        <div class="figure"><img src="assets/seam-frames.jpg" alt="Middle and last frame of shot s01 next to the first frame of s02"></div>
+        <div class="figure"><img src="assets/seam-frames.jpg" alt="Frames from the end of one shot and the start of the next"></div>
         <ul class="ticks">
-          <li><b>First → last frame.</b> The clip of a continuous shot is animated towards the next shot's keyframe
-            (Wan's <code>WanFirstLastFrameToVideo</code>). The seam differs by about 5/255 per pixel on average,
-            roughly the size of compression noise.</li>
-          <li><b>One camera move per take.</b> The slow push-in spans the whole continuous run instead of resetting on
-            every shot.</li>
-          <li><b>The director knows.</b> Every shot is marked <span class="pill"><span class="cut">✂ CUT</span></span> or
-            <span class="pill"><span class="flow">∞ CONTINUES</span></span>; continuous shots keep the place and
-            costume, and the previous shot's motion leads into the next picture.</li>
-          <li><b>Your call.</b> Flip any shot between cut and continuous in the storyboard; the header counts
-            “9 cuts · 36 continuous”.</li>
+          <li><b>No jumps.</b> The end of one shot and the start of the next are practically the same picture.</li>
+          <li><b>One camera move per take.</b> The camera keeps travelling through the whole take instead of resetting
+            on every shot.</li>
+          <li><b>Your call.</b> Every shot can start with a cut or continue the previous one. The storyboard shows
+            “9 cuts · 36 continuous” at a glance.</li>
         </ul>
       </div>
     </div>
 
     <div class="split" style="margin-top:28px">
       <div>
-        <div class="player"><video src="assets/excerpt-intro.mp4" controls playsinline preload="metadata"></video></div>
-        <div class="caption">Intro: the camera travels from the house to the lit window in one take (s01 → s02), then a hard cut into verse one.</div>
+        <div class="player"><video src="assets/excerpt-intro.mp4" poster="assets/poster-intro.jpg" controls playsinline preload="metadata"></video></div>
+        <div class="caption">Intro: from the house to the lit window in one take, then a cut into verse one.</div>
       </div>
       <div>
-        <div class="figure"><img src="assets/seam-in-video.jpg" alt="Six frames across the seam between shots s10 and s11 in the final video"></div>
-        <div class="caption">Six frames across the s10 → s11 seam in the final video, with karaoke captions. No jump.</div>
+        <div class="figure"><img src="assets/seam-in-video.jpg" alt="Six frames across the change between two shots in the final video"></div>
+        <div class="caption">Six frames across the change from one shot to the next in the final video, with karaoke captions.</div>
       </div>
     </div>
   </div>
@@ -232,79 +223,27 @@
 <section id="studio">
   <div class="wrap">
     <div class="head">
-      <div><div class="eyebrow">The studio</div><h2 style="margin-top:14px">A local studio<br>for <em>the whole film</em>.</h2></div>
-      <p><code>sunomv serve</code> opens a web app on your machine. Every step runs as a background job with a live
-        log and can be cancelled; nothing is rented without a confirmation and a price. (The interface is in Polish for now.)</p>
+      <div><div class="eyebrow">The studio</div><h2 style="margin-top:14px">A studio<br>for <em>the whole film</em>.</h2></div>
+      <p>Every project lives in one place: the song on a timeline, the shots, the pictures and the finished video.
+        Change any shot, keep the rest. (The interface is in Polish for now.)</p>
     </div>
+    <figure style="margin:0 0 18px">
+      <div class="figure"><img src="assets/ui-timeline.jpg" alt="Timeline with the waveform, beats, sections, shots and lyrics"></div>
+      <div class="caption">The timeline: waveform, beats, sections, shots and lyrics. Scissors mark the cuts, links mark the continuous transitions.</div>
+    </figure>
     <div class="shots">
-      <figure><div class="figure"><img src="assets/ui-storyboard.jpg" alt="Storyboard step with waveform, beat grid, sections, shots and cut markers"></div>
-        <figcaption><b>Storyboard</b>Waveform, beats, sections, shots and lyrics on one zoomable timeline. Scissors mark the cuts, links mark the continuous transitions. Every shot has an editor for its scene, motion and how it starts.</figcaption></figure>
-      <figure><div class="figure"><img src="assets/ui-keyframes.jpg" alt="Keyframes step with the character sheet and one keyframe per shot"></div>
-        <figcaption><b>Keyframes</b>The character sheet first, then one picture per shot in the project format. Continuous shots are tagged, and regenerating a keyframe warns you about the shots drawn from it.</figcaption></figure>
-      <figure><div class="figure"><img src="assets/ui-projects.jpg" alt="Projects overview with stage progress"></div>
-        <figcaption><b>Projects</b>Each project is horizontal 16:9 or vertical 9:16, with progress per stage and the Vast balance at a glance.</figcaption></figure>
-      <figure><div class="figure"><img src="assets/ui-result.jpg" alt="Result step with the video player and downloads"></div>
-        <figcaption><b>Result</b>Watch the preview, download the master. The video step before it shows the cost for 1, 2 or 4 cards from live offers.</figcaption></figure>
-    </div>
-  </div>
-</section>
-
-<section id="vast">
-  <div class="wrap">
-    <div class="head">
-      <div><div class="eyebrow">Rendering on Vast.ai</div><h2 style="margin-top:14px">Rented by the minute,<br><em>freed when done</em>.</h2></div>
-      <p>Clips need a 24 GB+ CUDA GPU. sunomv rents the cheapest good card, prepares it, runs the whole job on it
-        and downloads only the finished video. Workers run detached, so a laptop going to sleep cannot break a render.</p>
-    </div>
-    <div class="split">
-      <table>
-        <tr><th>Measured run</th><th>4:29 song · 45 shots · 16:9</th></tr>
-        <tr><td><b>Keyframes</b> · Codex, continuous chains in parallel</td><td class="num">~55 s / image · $0</td></tr>
-        <tr><td><b>Setup</b> · ComfyUI + Wan 2.2 fp8 (~44 GB)</td><td class="num">~10 min</td></tr>
-        <tr><td><b>Clips</b> · 45 × Wan 2.2 14B, one RTX 4090</td><td class="num">41 min</td></tr>
-        <tr><td><b>Render</b> · master 472 MB + preview</td><td class="num">9 min</td></tr>
-        <tr><td><b>GPU bill</b> for the video</td><td class="num">≈ $0.67</td></tr>
-      </table>
-      <ul class="ticks" style="margin-top:0">
-        <li><b>Setup costs count.</b> Offers are ranked by hourly price plus the model download on that host. Some
-          hosts charge $40/TB, which turns a $0.36/h card into a $2 one.</li>
-        <li><b>Slow hosts never get the job.</b> Each card first downloads 1 GB; one under 40 MB/s, or one that never
-          boots, is destroyed and replaced from spare offers.</li>
-        <li><b>One card is usually cheapest.</b> Every card pays its own setup, so the estimate compares 1, 2 and 4
-          cards before you confirm.</li>
-        <li><b>Nothing left running.</b> Cards are destroyed after the download, on errors and on cancel.</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<section id="start">
-  <div class="wrap">
-    <div class="head">
-      <div><div class="eyebrow">Get started</div><h2 style="margin-top:14px">Three commands<br>to <em>the studio</em>.</h2></div>
-      <p>macOS on Apple Silicon or Linux, with uv, ffmpeg and Node 20+. Keyframes use the Codex CLI (ChatGPT
-        sign-in), the director uses Claude Code, and clips need a Vast.ai account.</p>
-    </div>
-<pre><span class="c"># engine and API</span>
-<span class="k">cd</span> engine && uv sync --extra analysis --extra server --extra vast
-
-<span class="c"># studio UI, served by the API</span>
-<span class="k">cd</span> ../apps/web && npm install && npm run build
-
-<span class="c"># open http://127.0.0.1:8770</span>
-<span class="k">cd</span> ../../engine && uv run sunomv serve</pre>
-    <div class="stack">
-      <span>Python 3.12 · uv</span><span>FastAPI</span><span>React 19 · Vite · Tailwind 4</span><span>Demucs</span><span>beat_this</span>
-      <span>stable-ts · Whisper</span><span>Claude Code</span><span>Codex image tool</span><span>ComfyUI</span><span>Wan 2.2 14B</span>
-      <span>LTX-2.3 MLX</span><span>Vast.ai</span><span>ffmpeg · NVENC</span>
+      <figure><div class="figure"><img src="assets/ui-projects.jpg" alt="Projects overview"></div>
+        <figcaption><b>Projects</b>Each project is horizontal 16:9 or vertical 9:16, with its progress at a glance.</figcaption></figure>
+      <figure><div class="figure"><img src="assets/ui-result.jpg" alt="The finished video in the studio player"></div>
+        <figcaption><b>Result</b>Watch the preview and download the full-quality master.</figcaption></figure>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <span>sunomv · use only songs, lyrics and covers you have the rights to.</span>
-    <a href="https://github.com/jash90/suno-audio-wideo">github.com/jash90/suno-audio-wideo</a>
+    <span>sunomv is a private project in active development.</span>
+    <span>Use only songs, lyrics and covers you have the rights to.</span>
   </div>
 </footer>
 

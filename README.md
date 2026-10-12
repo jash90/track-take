@@ -41,11 +41,11 @@ roughly the size of compression noise. Cuts are editable per shot in the storybo
 
 `sunomv serve` starts a local studio (FastAPI and a React single-page app) at `http://127.0.0.1:8770`. The interface is in Polish for now.
 
-| Projects | Storyboard |
+![Storyboard timeline with cuts and continuous transitions](site/assets/ui-timeline.jpg)
+
+| Projects | Result |
 |---|---|
-| ![Projects](site/assets/ui-projects.jpg) | ![Storyboard timeline with cuts and continuous transitions](site/assets/ui-storyboard.jpg) |
-| **Keyframes** | **Result** |
-| ![Keyframes](site/assets/ui-keyframes.jpg) | ![Result](site/assets/ui-result.jpg) |
+| ![Projects](site/assets/ui-projects.jpg) | ![Result](site/assets/ui-result.jpg) |
 
 - **Projects:** each project is horizontal 16:9 *or* vertical 9:16, with progress per stage.
 - **Inputs:** song, lyrics, cover and style; the format can be changed later.
