@@ -4,6 +4,7 @@ import { api, qk } from "../../api/client";
 import { useEstimate, useRenderPresets, useSetup, useStartJob } from "../../api/hooks";
 import { useDebounced } from "../../lib/useDebounced";
 import { CustomRender } from "../render/CustomRender";
+import { AnimationField } from "../inputs/AnimationField";
 import { useSaveSettings } from "../render/useSaveSettings";
 import type { PresetChoice, Project } from "../../api/types";
 import { Dialog } from "../../components/Dialog";
@@ -112,6 +113,7 @@ export function MakeVideoDialog({ open, onClose, project, initial }: Props) {
       ) : (
         <div className="flex flex-col gap-5">
           <p className="text-sm leading-relaxed text-ink-400">{t("mv.lead")}</p>
+          <AnimationField project={project} disabled={start.isPending} onGoStoryboard={onClose} />
           <PresetCards
             data={presets.data}
             loading={presets.isPending}

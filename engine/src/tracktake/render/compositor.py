@@ -38,6 +38,8 @@ class Shot:
     cam_to: Camera = field(default_factory=Camera)
     focus: tuple[float, float] = (0.5, 0.5)  # where the subject is; narrow formats centre on it
     seed: int = 0
+    whip_in: int = 0  # frames of a whip pan arriving at the start (the picture slides in from the right, blurred)
+    whip_out: int = 0  # frames of a whip pan leaving at the end (the picture slides out to the left)
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,24 @@ def compose(
         m[1, 2] += oy - ih / 2
         _place(canvas, img, m)
     return np.clip(canvas, 0, 255).astype(np.uint8)
+
+
+def whip(frame: np.ndarray, shot: Shot, f: int, reach: float = 0.35, smear: float = 0.22) -> np.ndarray:
+    """Whip-pan transition: around a cut the camera swings sideways so fast the picture smears. Shot A slides out to
+    the left, shot B slides in from the right, each within its own frames, so the cut sits in the blur."""
+    k, sign = 0.0, 1.0
+    if shot.whip_in and f < shot.start_frame + shot.whip_in:
+        k = (shot.start_frame + shot.whip_in - f) / (shot.whip_in + 1)
+    elif shot.whip_out and f >= shot.end_frame - shot.whip_out:
+        k, sign = (f - (shot.end_frame - shot.whip_out) + 1) / (shot.whip_out + 1), -1.0
+    if k <= 0:
+        return frame
+    e = k * k  # eases: slow at the shot's side, fastest at the cut
+    h, w = frame.shape[:2]
+    m = np.float32([[1, 0, sign * e * w * reach], [0, 1, 0]])
+    moved = cv2.warpAffine(frame, m, (w, h), borderMode=cv2.BORDER_REFLECT)
+    length = int(e * w * smear)
+    return cv2.blur(moved, (length, 1)) if length > 1 else moved
 
 
 def to_rgba(img: np.ndarray) -> np.ndarray:

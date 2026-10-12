@@ -36,7 +36,7 @@ def run_analyze(ctx: Context, p: Project) -> None:
 
 
 def plan(p: Project) -> dict:
-    sb = storyboard.replan(analysis(p), p.storyboard(), p.meta().style)
+    sb = storyboard.replan(analysis(p), p.storyboard(), p.meta().style, p.meta().settings.animation)
     p.save_storyboard(sb)
     p.update(storyboard_approved=False)
     return sb

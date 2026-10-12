@@ -23,6 +23,7 @@ import { Monitor } from "./Monitor";
 import { useFollowPlayhead } from "./useFollowPlayhead";
 import { StoryboardBanners } from "./StoryboardBanners";
 import { checkKinds, isStale } from "../keys/stale";
+import { projectAnimation, storyboardAnimation, useAnimationName } from "../../lib/animation";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
@@ -76,6 +77,12 @@ export function StoryboardStep() {
     [keysQ.data, shots, orientation],
   );
   const issueKinds = useMemo(() => checkKinds(keysQ.data), [keysQ.data]);
+  const animName = useAnimationName();
+  const wanted = projectAnimation(project);
+  const planned = sbQ.data ? storyboardAnimation(sbQ.data) : null;
+  // planned for another style: the shot rhythm doesn't fit until re-planned (never automatic)
+  const animMismatch = planned !== null && planned !== wanted;
+  const tableau = (planned ?? wanted) === "tableau";
 
   const pick = useCallback((sid: string, additive: boolean) => {
     setPrimary(sid);
@@ -208,7 +215,7 @@ export function StoryboardStep() {
           </>
         }
       >
-        {t("sb.lead")}
+        {t(tableau ? "sb.leadTableau" : "sb.lead")}
         {draft && (
           <>
             <Trans k="sb.writtenCount" values={{ written: <b className="text-ink-200">{written}/{shots.length}</b> }} />
@@ -221,7 +228,22 @@ export function StoryboardStep() {
       </StepHeader>
       <InlineError error={save.error ?? plan.error ?? write.error ?? (noStoryboard ? null : sbQ.error)} />
 
-      <StoryboardBanners writing={writing} stale={stale} onLoadServer={discard} />
+      <StoryboardBanners
+        writing={writing}
+        stale={stale}
+        onLoadServer={discard}
+        mismatch={
+          animMismatch && planned
+            ? {
+                planned: animName(planned),
+                current: animName(wanted),
+                onReplan: () => setConfirmPlan(true),
+                busy: plan.isPending,
+                disabled: busyAny || !!writing,
+              }
+            : null
+        }
+      />
       <Timeline
         duration={analysis.data.duration}
         peaks={peaks.data?.peaks}
@@ -244,7 +266,7 @@ export function StoryboardStep() {
           {sbQ.isPending && !noStoryboard && <Loading label={t("sb.loading")} />}
           {noStoryboard && (
             <Empty title={t("sb.empty")} action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>{t("sb.planFirst")}</Button>}>
-              {t("sb.emptyBody")}
+              {t(wanted === "tableau" ? "sb.emptyBodyTableau" : "sb.emptyBody")}
             </Empty>
           )}
           {draft && shots.length > 0 && (
@@ -299,13 +321,15 @@ export function StoryboardStep() {
       {draft && <NextStepLink to="../klatki" />}
       <ConfirmDialog
         open={confirmPlan}
-        title={t("sb.planTitle")}
-        confirmLabel={t("sb.planConfirm")}
+        title={animMismatch ? t("sb.animReplanTitle", { current: animName(wanted) }) : t("sb.planTitle")}
+        confirmLabel={animMismatch ? t("sb.animReplan") : t("sb.planConfirm")}
         busy={plan.isPending}
         onConfirm={() => plan.mutate()}
         onClose={() => setConfirmPlan(false)}
       >
-        {t("sb.planBody")}
+        {animMismatch && planned
+          ? t("sb.animReplanBody", { planned: animName(planned), current: animName(wanted), write: t("sb.write") })
+          : t(wanted === "tableau" ? "sb.planBodyTableau" : "sb.planBody")}
         {dirty && t("sb.planDirty")}
         <InlineError error={plan.error} />
       </ConfirmDialog>

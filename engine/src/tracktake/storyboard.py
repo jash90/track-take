@@ -10,11 +10,13 @@ subscription, no API key) asked for structured JSON; `codex exec` is the fallbac
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 from itertools import pairwise
 from pathlib import Path
 
+from tracktake import animation as anim
 from tracktake.models import Analysis
 
 CUT_KINDS = {"verse", "chorus", "bridge", "breakdown", "outro"}
@@ -28,19 +30,70 @@ MIN_SHOT_S = 5.0  # a clip needs time for its motion and for flowing into the ne
 TINY_SHOT_S = 3.0  # leftovers shorter than this join the previous shot
 
 
-def bars_per_shot(a: Analysis) -> int:
-    """2 bars per shot, doubled until a shot lasts at least MIN_SHOT_S (4 bars for fast songs, 8 for very fast)."""
+def bars_per_shot(a: Analysis, min_shot_s: float = MIN_SHOT_S) -> int:
+    """2 bars per shot, doubled until a shot lasts at least `min_shot_s` (4 bars for fast songs, 8 for very fast)."""
     downs = sorted(a.downbeats)
     gaps = sorted(b - c for c, b in pairwise(downs) if b > c)
     bar = gaps[len(gaps) // 2] if gaps else 2.0
     step = 2
-    while step * bar < MIN_SHOT_S and step < 8:
+    while step * bar < min_shot_s and step < 8:
         step *= 2
     return step
 
 
-def plan_shots(a: Analysis) -> list[dict]:
-    step = bars_per_shot(a)
+def plan_tableau(a: Analysis, style: dict) -> list[dict]:
+    """Living-illustration rhythm (see animation.py): a long travelling shot in the intro, ~5.2 s tableaux joined
+    by whip pans in verses, short inserts alternating with long wide shots on hard cuts in choruses. Boundaries sit on
+    downbeats; every shot is a separate place (`cut`), `transition` says how it is entered (cut | whip)."""
+    downs = sorted(a.downbeats)
+    gaps = sorted(b - c for c, b in pairwise(downs) if b > c)
+    bar = gaps[len(gaps) // 2] if gaps else 2.0
+
+    def bars(seconds: float, least: int = 1) -> int:
+        return max(least, round(seconds / bar))
+
+    shots: list[dict] = []
+    for s in a.sections:
+        if s.end - s.start < 1.5 and shots:  # a blip of a section joins the shot before it
+            shots[-1]["end"] = round(s.end, 2)
+            continue
+        marks = sorted({round(s.start, 2)} | {round(d, 2) for d in downs if s.start + 0.3 < d < s.end - 0.3})
+        if len(marks) > 1 and marks[1] - marks[0] < 0.75 * bar:  # a part starting off the bar: its first shot
+            marks.pop(1)  # takes the partial bar too
+        if s.kind == "intro":
+            parts = max(1, math.ceil((s.end - s.start) / style["travel_max_s"]))
+            cycle = [("travel", max(1, math.ceil(len(marks) / parts)))]
+        elif s.kind == "chorus":
+            cycle = [("insert", bars(style["insert_s"])), ("wide", bars(style["wide_s"], 2))]
+        else:
+            cycle = [("tableau", bars(style["tableau_s"], 2))]
+        joined = "cut" if s.kind in style["cut_parts"] else "whip"
+        i = k = 0
+        while i < len(marks):
+            role, n = cycle[k % len(cycle)]
+            j = min(i + n, len(marks))
+            next_n = cycle[(k + 1) % len(cycle)][1]
+            if j < len(marks) and s.end - marks[j] < max(1.5, next_n * bar / 2):  # a leftover too short for the
+                j = len(marks)  # next shot joins this one
+            end = marks[j] if j < len(marks) else round(s.end, 2)
+            shots.append({"start": marks[i], "end": end, "section": s.label, "kind": s.kind, "role": role,
+                          "transition": "cut" if i == 0 else joined})
+            i, k = j, k + 1
+    for i, sh in enumerate(shots):
+        sh["id"] = f"s{i + 1:02d}"
+        sh["lines"] = [ln.text for ln in a.lines if sh["start"] - 0.4 <= ln.start < sh["end"] - 0.4]
+        sh["cut"] = True
+        sh["scene"] = ""
+        sh["motion"] = ""
+    return shots
+
+
+def plan_shots(a: Analysis, animation: str = anim.DEFAULT) -> list[dict]:
+    """Shots on the bar grid. With an animation without takes (tableau) every shot starts with a cut."""
+    style = anim.get(animation)
+    if "tableau_s" in style:
+        return plan_tableau(a, style)
+    step = bars_per_shot(a, style["min_shot_s"])
     shots: list[dict] = []
     for s in a.sections:
         if s.end - s.start < 1.5 and shots and s.kind == "build":
@@ -67,7 +120,7 @@ def plan_shots(a: Analysis) -> list[dict]:
         sh["id"] = f"s{i + 1:02d}"
         sh["lines"] = [ln.text for ln in a.lines if sh["start"] - 0.4 <= ln.start < sh["end"] - 0.4]
         new_section = sh["section"].split("+")[0] != shots[i - 1]["section"].split("+")[0] if i else True
-        sh["cut"] = i == 0 or (new_section and sh["kind"] in CUT_KINDS)
+        sh["cut"] = i == 0 or not style["takes"] or (new_section and sh["kind"] in CUT_KINDS)
         sh["scene"] = ""
         sh["motion"] = ""
     return shots
@@ -83,17 +136,18 @@ def continues_into(shots: list[dict], i: int) -> dict | None:
     return shots[i + 1] if i + 1 < len(shots) and not is_cut(shots, i + 1) else None
 
 
-def replan(a: Analysis, old: dict | None, style: str) -> dict:
+def replan(a: Analysis, old: dict | None, style: str, animation: str = anim.DEFAULT) -> dict:
     """New boundaries; scene/motion texts survive for shots whose time range did not change."""
-    shots = plan_shots(a)
+    shots = plan_shots(a, animation)
+    takes = anim.get(animation)["takes"]
     previous = {(round(s["start"], 1), round(s["end"], 1)): s for s in (old or {}).get("shots", [])}
     for sh in shots:
         prev = previous.get((round(sh["start"], 1), round(sh["end"], 1)))
         if prev:
             sh["scene"], sh["motion"] = prev.get("scene", ""), prev.get("motion", "")
-            sh["cut"] = prev.get("cut", sh["cut"]) or sh["id"] == "s01"
+            sh["cut"] = prev.get("cut", sh["cut"]) or sh["id"] == "s01" or not takes
     return {"style": (old or {}).get("style") or style or DEFAULT_STYLE, "heroine": (old or {}).get("heroine", ""),
-            "shots": shots}
+            "animation": animation, "shots": shots}
 
 
 BIBLE_ITEM = {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"},
@@ -173,13 +227,16 @@ def director_prompt(sb: dict, shot_ids: list[str], song_style: str, cover: Path 
     shots = [s for s in sb["shots"] if s["id"] in shot_ids]
     lines = [f"{s['id']} {s['start']:.1f}-{s['end']:.1f}s ({s['end'] - s['start']:.1f} s) [{s['section']}] "
              f"{'CUT' if is_cut(sb['shots'], i) else 'CONTINUES'} lyrics: {' / '.join(s['lines']) or '(instrumental)'}"
+             + (f" | role: {s['role']}" if s.get("role") else "")
              + (f" | location: {s['location']}" if s.get("location") else "")
              + (f" | current scene: {s['scene']}" if s.get("scene") else "") for i, s in enumerate(sb["shots"])]
     cover_hint = f"Look at the album cover image at {cover} (use the Read tool) for palette and mood.\n" if cover else ""
     heroine = sb.get("heroine") or "(not defined yet: invent one main character that fits the cover and song, " \
                                    "and describe her look precisely in `heroine`: hair, face, clothes, shoes)"
     bible = bible_text(sb)
-    return (f"{RULES}\n\nVideo style: {song_style or sb.get('style') or DEFAULT_STYLE}\nMain character: {heroine}\n"
+    moves = anim.get(sb.get("animation"))["motion"]
+    return (f"{RULES}\n\nVideo style: {song_style or sb.get('style') or DEFAULT_STYLE}\n"
+            f"{moves + chr(10) if moves else ''}Main character: {heroine}\n"
             f"{cover_hint}{('Extra instructions from the user: ' + instructions) if instructions else ''}\n\n"
             + (f"World bible:\n{bible}\n\n" if bible else "") +
             f"Full lyrics:\n{lyrics}\n\nAll shots of the video (for context):\n" + "\n".join(lines)

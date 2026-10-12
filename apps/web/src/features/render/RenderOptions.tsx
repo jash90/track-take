@@ -1,6 +1,7 @@
 import type { Project, ProjectSettings } from "../../api/types";
 import { useT, type Key } from "../../i18n";
 import { cx } from "../../lib/cx";
+import { projectAnimation } from "../../lib/animation";
 import { useSaveSettings } from "./useSaveSettings";
 
 type Flag = "captions" | "beat_motion";
@@ -12,6 +13,9 @@ const OPTIONS: { flag: Flag; label: Key; hint: Key }[] = [
 /** Missing in older backends = on (the defaults). */
 export const flagOn = (s: Partial<ProjectSettings>, f: Flag) => s[f] !== false;
 
+/** Whether the flag actually takes effect: the living-illustration montage never pumps/shakes to the beat. */
+export const flagApplies = (p: Pick<Project, "settings">, f: Flag) => f !== "beat_motion" || projectAnimation(p) !== "tableau";
+
 /** Captions / beat-motion switches; saved immediately (optimistic PATCH of project settings). */
 export function RenderOptions({ project }: { project: Project }) {
   const t = useT();
@@ -22,17 +26,19 @@ export function RenderOptions({ project }: { project: Project }) {
       <legend className="label">{t("renderOpts.title")}</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {OPTIONS.map((o) => {
-          const on = flagOn(project.settings, o.flag);
+          const applies = flagApplies(project, o.flag);
+          const on = applies && flagOn(project.settings, o.flag);
           return (
             <button
               key={o.flag}
               type="button"
               role="switch"
               aria-checked={on}
+              disabled={!applies}
               onClick={() => save.mutate({ [o.flag]: !on })}
               className={cx(
-                "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                on ? "border-safe/60 bg-safe/[0.06]" : "border-ink-600 hover:border-ink-400",
+                "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55",
+                on ? "border-safe/60 bg-safe/[0.06]" : "border-ink-600 enabled:hover:border-ink-400",
               )}
             >
               <span
@@ -51,7 +57,7 @@ export function RenderOptions({ project }: { project: Project }) {
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-[0.9rem] text-ink-100">{t(o.label)}</span>
-                <span className="text-[0.72rem] leading-snug text-ink-400">{t(o.hint)}</span>
+                <span className="text-[0.72rem] leading-snug text-ink-400">{applies ? t(o.hint) : t("renderOpts.beatTableau")}</span>
               </span>
             </button>
           );

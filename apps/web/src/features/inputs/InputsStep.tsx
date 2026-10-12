@@ -13,6 +13,7 @@ import { errorMessage } from "../../lib/format";
 import { activeJob, useWorkspace } from "../workspace/context";
 import { AnalysisSummary } from "./AnalysisSummary";
 import { OrientationField } from "./OrientationField";
+import { AnimationField } from "./AnimationField";
 import { Trans, useT, type Key } from "../../i18n";
 import { jobTitle } from "../jobs/jobTitle";
 
@@ -220,6 +221,7 @@ export function InputsStep() {
               </select>
             </div>
           </div>
+          <AnimationField project={project} disabled={pilotBusy} />
           <div>
             <label className="label" htmlFor="in-style">{t("inputs.style")}</label>
             <textarea

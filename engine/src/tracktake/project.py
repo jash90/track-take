@@ -38,6 +38,7 @@ class Settings:
     region: str = "US"  # rent here first (faster model downloads); "any" = anywhere, or e.g. "US,CA"
     captions: bool = True  # karaoke lyrics in the video
     beat_motion: bool = True  # camera pump on downbeats and shake on snares
+    animation: str = "stopmotion"  # how the video moves: stopmotion | tableau (see animation.py)
 
 
 @dataclass

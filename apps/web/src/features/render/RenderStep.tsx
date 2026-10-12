@@ -13,7 +13,7 @@ import { FormatBadge, formatRatio, orientationInfo, projectFormat, projectOrient
 import { RenderJobPanel } from "./RenderJobPanel";
 import { VastPanel } from "./VastPanel";
 import { Trans, useT, type Key } from "../../i18n";
-import { RenderOptions, flagOn } from "./RenderOptions";
+import { RenderOptions, flagApplies, flagOn } from "./RenderOptions";
 import { CustomRender } from "./CustomRender";
 import { useSaveSettings } from "./useSaveSettings";
 import { PresetCards } from "../autopilot/PresetCards";
@@ -237,7 +237,7 @@ export function RenderStep() {
               <li>
                 {t("render.lineOptions", {
                   captions: t(flagOn(project.settings, "captions") ? "renderOpts.on" : "renderOpts.off"),
-                  beat: t(flagOn(project.settings, "beat_motion") ? "renderOpts.on" : "renderOpts.off"),
+                  beat: t(flagApplies(project, "beat_motion") && flagOn(project.settings, "beat_motion") ? "renderOpts.on" : "renderOpts.off"),
                 })}
               </li>
               <li>{t("render.lineTime", { time: timeRoomy(t, shownMinutes ?? e.minutes, shownMinutesMax ?? e.minutes_max), gb: e.models_gb })}</li>

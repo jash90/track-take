@@ -4,6 +4,14 @@
 export type KeySet = "codex" | "comfy";
 export type Orientation = "landscape" | "portrait";
 export type FormatName = "16x9" | "9x16";
+/** How the video moves: stopmotion = continuous takes "on twos" with beat pump/shake; tableau = "living illustration",
+ * every shot its own calm tableau cut on the bar, smooth playback, whip pans inside a section, hard cuts at section starts. */
+export type AnimationId = "stopmotion" | "tableau";
+export interface AnimationInfo {
+  id: AnimationId;
+  name: { pl: string; en: string };
+}
+// GET /api/animations -> AnimationInfo[]
 
 export interface ProjectSettings {
   workers: number; // Vast cards for the render
@@ -12,7 +20,8 @@ export interface ProjectSettings {
   max_dph: number; // USD per hour cap per GPU (a host with N GPUs may cost up to N × max_dph)
   captions: boolean; // karaoke lyrics burned into the video (default true)
   region?: string; // "US" (default) | "US,CA" | "any" | comma list of country codes; falls back to anywhere when no offer
-  beat_motion: boolean; // camera pump on downbeats + shake on snares (default true)
+  beat_motion: boolean; // camera pump on downbeats + shake on snares (default true); no effect with animation "tableau"
+  animation?: AnimationId; // default "stopmotion"; changing it on a planned storyboard needs a re-plan
 }
 
 export interface Project {
@@ -150,6 +159,7 @@ export interface ContinuityIssue {
 }
 export interface Storyboard {
   style: string;
+  animation?: AnimationId; // the animation the shots were planned with; missing = "stopmotion" (older storyboards)
   heroine: string; // character description used in every prompt
   shots: Shot[];
   locations?: WorldItem[];
@@ -159,7 +169,8 @@ export interface Storyboard {
 // POST /api/projects/{id}/storyboard/check -> Job (kind "continuity")
 // GET /api/projects/{id}/storyboard -> Storyboard (404 if none)
 // PUT /api/projects/{id}/storyboard Storyboard -> Storyboard
-// POST /api/projects/{id}/storyboard/plan -> Storyboard  (cut on downbeats, 2 bars/shot; keeps texts of unchanged shots)
+// POST /api/projects/{id}/storyboard/plan -> Storyboard  (cut on downbeats for settings.animation: stopmotion 2 bars/shot,
+//   tableau 2 or 4 bars and every shot a cut; keeps texts of shots whose time range did not change)
 // POST /api/projects/{id}/storyboard/write {shots?: string[], instructions?: string} -> Job  (director writes scene+motion)
 
 export interface ShotKeys {

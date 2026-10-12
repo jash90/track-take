@@ -1,7 +1,9 @@
 """Full video, step 3: assemble the whole song from the Wan clips, both formats, captions and audio.
 
-Each shot's clip is stretched over the whole shot; stop-motion drawings (on twos, a new drawing forced on every
-beat) sample the clip at their moment, the downbeat pump and snare shake come from the analysis.
+Each shot's clip is stretched over the whole shot. How it is played follows the storyboard's animation
+(tracktake.animation): stop-motion drawings (on twos, a new drawing forced on every beat) with the downbeat pump and
+snare shake from the analysis, or a living illustration played smoothly (neighbouring clip frames blended) with whip
+pans between the shots of a section.
 The song is cut into chunks on shot boundaries and the chunks are composed by parallel processes (the compositor is
 CPU-bound), then joined without re-encoding and muxed with the audio. With --wait-clips on, a chunk starts as soon
 as its own clips exist, so the render runs while the GPU is still generating the later clips.
@@ -18,10 +20,15 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+import numpy as np
+
+from tracktake import animation
 from tracktake.models import Analysis
+from tracktake.render import encoders
 from tracktake.render.compositor import LANDSCAPE, PORTRAIT, Camera, Format, Layer, Shot
 from tracktake.render.encoders import video_args
 from tracktake.render.stepping import drawing_frames
@@ -58,7 +65,21 @@ def chunks(shots: list[dict], n: int) -> list[tuple[int, int]]:
 
 
 def render_chunk(job: dict) -> dict:
-    """One chunk, in its own process: load only its clips (waiting for them if asked), render video without audio."""
+    """One chunk, in its own process. Hardware encoders allow only a few sessions at once (a consumer card's NVENC
+    on some drivers: fewer than our 8 chunks - ffmpeg then dies with ENOMEM, exit 244, after all the clips were made),
+    so a chunk whose GPU encoding fails is encoded again on the CPU."""
+    try:
+        return _render_chunk(job)
+    except RuntimeError as e:
+        if "ffmpeg exited" not in str(e) or encoders.family() != "nvenc":
+            raise
+        print(f"chunk {job['first']}-{job['last']}: {e} with NVENC - encoding on the CPU", flush=True)
+        os.environ["TRACKTAKE_ENCODER"] = "cpu"  # this worker process only
+        return _render_chunk(job)
+
+
+def _render_chunk(job: dict) -> dict:
+    """Load only the chunk's clips (waiting for them if asked) and render its video without audio."""
     full, kind, fmt = Path(job["full"]), job["kind"], FORMATS[job["format"]]
     sb = json.loads((full / "storyboard.json").read_text())
     analysis = Analysis.model_validate_json(Path(job["analysis"]).read_text())
@@ -69,20 +90,65 @@ def render_chunk(job: dict) -> dict:
         if time.monotonic() > deadline:
             raise RuntimeError(f"clips never arrived: {[c for c in ids if not (clips / f'{c}.json').exists()]}")
         time.sleep(10)
-    beat_frames = frames_of(analysis.beats, FPS)
+    style = animation.get(sb.get("animation"))
+    cadence = style["cadence"]
+    beat_frames = frames_of(analysis.beats, FPS) if cadence > 1 else []
     shots = []
     for i in range(job["first"], job["last"]):
         sh = sb["shots"][i]
         start, end = frame_at(sh["start"], FPS), frame_at(sh["end"], FPS)
         frames = _read_pngs(clips / f"{sh['id']}_{ORIENT[fmt.name]}")
-        plan = drawing_frames(start, end, 2, forced=beat_frames, min_hold=2)
+        plan = drawing_frames(start, end, cadence, forced=beat_frames, min_hold=min(2, cadence))
         span = max(end - start, 1)
-        drawings = [frames[min(round((sf - start) / span * (len(frames) - 1)), len(frames) - 1)] for sf in plan]
-        shots.append(video_shot(drawings, fmt, start, end, 100 + i, *zoom_span(sb["shots"], i)))
+        positions = [(sf - start) / span * (len(frames) - 1) for sf in plan]
+        if cadence > 1:
+            drawings: Sequence = [frames[min(round(x), len(frames) - 1)] for x in positions]
+        else:
+            drawings = Blended(frames, positions)
+        shot = video_shot(drawings, fmt, start, end, 100 + i, *zoom_span(sb["shots"], i, style["zoom"]))
+        shot.whip_in, shot.whip_out = whips(sb["shots"], i, style["whip_frames"])
+        shots.append(shot)
     t0 = shots[0].start_frame / FPS
     t1 = analysis.duration if job["last"] == len(sb["shots"]) else shots[-1].end_frame / FPS
-    return render(shots, [2] * len(shots), analysis, fmt, job["out"], fps=FPS, t0=t0, t1=t1, audio=None,
-                  captions=job["captions"], beat_motion=job["beat_motion"])
+    return render(shots, [cadence] * len(shots), analysis, fmt, job["out"], fps=FPS, t0=t0, t1=t1, audio=None,
+                  captions=job["captions"], beat_motion=job["beat_motion"] and style["beat_motion"])
+
+
+class Blended(Sequence):
+    """Clip frames at fractional positions, the two neighbours mixed: a 5 s clip stretched over a longer shot plays
+    smoothly instead of stuttering. Made on demand (a whole shot of blended 720p frames would not fit in memory)."""
+
+    def __init__(self, frames: list[np.ndarray], positions: list[float]):
+        self.frames, self.positions = frames, positions
+
+    def __len__(self) -> int:
+        return len(self.positions)
+
+    def __getitem__(self, i):
+        x = min(max(self.positions[i], 0.0), len(self.frames) - 1)
+        lo = int(x)
+        a = x - lo
+        if a < 0.02 or lo + 1 >= len(self.frames):
+            return self.frames[lo]
+        mix = self.frames[lo].astype(np.float32) * (1 - a) + self.frames[lo + 1].astype(np.float32) * a
+        return mix.astype(np.uint8)
+
+
+def whips(shots: list[dict], i: int, frames: int) -> tuple[int, int]:
+    """Whip pans join the shots of one section; a new section (and the first and last shot) starts on a hard cut.
+    A planned `transition` (cut | whip, living illustration) decides instead when the storyboard has one."""
+    if not frames:
+        return 0, 0
+    if "transition" in shots[i]:
+        nxt = shots[i + 1].get("transition") if i + 1 < len(shots) else "cut"
+        return (frames if i > 0 and shots[i]["transition"] == "whip" else 0, frames if nxt == "whip" else 0)
+
+    def section(j: int) -> str:
+        return shots[j]["section"].split("+")[0]
+
+    into = frames if i > 0 and section(i) == section(i - 1) else 0
+    out = frames if i + 1 < len(shots) and section(i) == section(i + 1) else 0
+    return into, out
 
 
 def main() -> None:

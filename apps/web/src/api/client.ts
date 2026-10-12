@@ -1,4 +1,5 @@
 import type {
+  AnimationInfo,
   Analysis,
   Estimate,
   Job,
@@ -146,6 +147,7 @@ export const api = {
   render: (id: string, payload: RenderPayload) =>
     request<Job>(`${p(id)}/render`, json("POST", payload)),
 
+  animations: () => request<AnimationInfo[]>("/api/animations"),
   vast: () => request<VastStatus>("/api/vast"),
   autopilot: (id: string, payload: AutopilotPayload) => request<Job>(`${p(id)}/autopilot`, json("POST", payload)),
   renderPresets: (id: string) => request<RenderPresets>(`${p(id)}/render-presets`),
@@ -179,6 +181,7 @@ export const qk = {
   vastGpus: (region?: string) => ["vast", "gpus", region ?? null] as const,
   renderPresets: (id: string) => ["project", id, "render-presets"] as const,
   setup: ["setup"] as const,
+  animations: ["animations"] as const,
   jobs: (id: string) => ["jobs", id] as const,
   vast: ["vast"] as const,
 };

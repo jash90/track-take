@@ -70,6 +70,11 @@ export function useSetup(enabled = true) {
   return useQuery({ queryKey: qk.setup, queryFn: api.setup, enabled, staleTime: 30_000, retry: 1 });
 }
 
+/** The animation styles the backend knows (static: cached for the session). */
+export function useAnimations() {
+  return useQuery({ queryKey: qk.animations, queryFn: api.animations, staleTime: Infinity, retry: 1 });
+}
+
 export function useVastGpus(region?: string) {
   return useQuery({ queryKey: qk.vastGpus(region), queryFn: () => api.vastGpus(region), staleTime: 5 * 60_000, retry: 1 });
 }

@@ -8,6 +8,7 @@ import { useJobWatcher } from "../jobs/useJobWatcher";
 import { WorkspaceCtx, useWorkspace, type WorkspaceValue } from "./context";
 import { Stepper } from "./Stepper";
 import { FormatBadge, projectOrientation, renderedSets } from "../../lib/orientation";
+import { AnimationBadge, projectAnimation } from "../../lib/animation";
 import { useT } from "../../i18n";
 import { AutopilotBanner } from "../autopilot/AutopilotBanner";
 import { MakeVideoDialog, type MakeVideoInitial } from "../autopilot/MakeVideoDialog";
@@ -56,10 +57,14 @@ export function WorkspacePage() {
           <div className="mb-4 hidden px-3 lg:block">
             <div className="eyebrow">{t("workspace.project")}</div>
             <div className="mt-1 truncate font-display text-2xl italic">{value.project.name}</div>
-            <FormatBadge orientation={projectOrientation(value.project)} className="mt-2" />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <FormatBadge orientation={projectOrientation(value.project)} />
+              <AnimationBadge animation={projectAnimation(value.project)} />
+            </div>
           </div>
-          <div className="mb-2 px-3 lg:hidden">
+          <div className="mb-2 flex flex-wrap gap-1.5 px-3 lg:hidden">
             <FormatBadge orientation={projectOrientation(value.project)} />
+            <AnimationBadge animation={projectAnimation(value.project)} />
           </div>
           <Stepper project={value.project} jobs={jobs} />
         </aside>

@@ -19,3 +19,21 @@ def test_chunks_cover_every_shot_once_with_similar_durations():
 def test_fewer_shots_than_jobs():
     shots = [{"start": i, "end": i + 1.0} for i in range(3)]
     assert chunks(shots, 8) == [(0, 1), (1, 2), (2, 3)]
+
+
+def test_a_chunk_whose_gpu_encoding_fails_is_encoded_on_the_cpu(monkeypatch):
+    import full_render
+
+    calls = []
+
+    def flaky(job):
+        calls.append(full_render.os.environ.get("TRACKTAKE_ENCODER"))
+        if len(calls) == 1:
+            raise RuntimeError("ffmpeg exited with 244")
+        return {"frames": 1}
+
+    monkeypatch.setattr(full_render, "_render_chunk", flaky)
+    monkeypatch.setattr(full_render.encoders, "family", lambda: "nvenc")
+    monkeypatch.delenv("TRACKTAKE_ENCODER", raising=False)
+    assert full_render.render_chunk({"first": 0, "last": 3}) == {"frames": 1}
+    assert calls == [None, "cpu"]

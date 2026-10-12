@@ -413,6 +413,13 @@ async def client_error(request: Request) -> dict:
     return {"ok": True}
 
 
+@app.get("/api/animations")
+def get_animations() -> list[dict]:
+    from tracktake import animation
+
+    return animation.listing()
+
+
 @app.get("/api/setup")
 def setup_status() -> dict:
     return setup_check.status()

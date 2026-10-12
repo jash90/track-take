@@ -3,6 +3,7 @@ import type { Project } from "../../api/types";
 import { cx } from "../../lib/cx";
 import { formatDate } from "../../lib/format";
 import { FormatBadge, projectFormat, projectOrientation } from "../../lib/orientation";
+import { AnimationBadge, projectAnimation } from "../../lib/animation";
 import { keysSummary, projectStages } from "./stages";
 import { useT } from "../../i18n";
 
@@ -35,7 +36,10 @@ export function ProjectCard({ project, index }: { project: Project; index: numbe
           </div>
         )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/20 to-transparent" />
-        <FormatBadge orientation={projectOrientation(project)} className="absolute right-3 top-3 backdrop-blur" />
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
+          <FormatBadge orientation={projectOrientation(project)} className="backdrop-blur" />
+          <AnimationBadge animation={projectAnimation(project)} className="backdrop-blur" />
+        </div>
         <div className="absolute inset-x-0 bottom-0 p-4">
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-ink-400">
             {formatDate(project.created)} · {project.language || "—"}

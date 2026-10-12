@@ -10,7 +10,7 @@ import numpy as np
 
 from tracktake.models import Analysis
 from tracktake.render.captions import line_at, overlay, render_caption
-from tracktake.render.compositor import Format, Shot, compose
+from tracktake.render.compositor import Format, Shot, compose, whip
 from tracktake.render.encode import VideoWriter
 from tracktake.render.stepping import active_drawing, drawing_frames, pulse_track
 from tracktake.timegrid import frame_at, frames_of
@@ -78,7 +78,7 @@ def render(
                 sf = plan[d]  # stop-motion: evaluate the scene when the drawing is shot, then hold it
                 frame_cache = ((shot_i, d), compose(shot, fmt, sf, d, p.kick[sf], p.snare[sf], p.beat[sf]))
                 drawings += 1
-            frame = frame_cache[1]
+            frame = whip(frame_cache[1], shot, f) if shot.whip_in or shot.whip_out else frame_cache[1]
             if captions:
                 t = f / fps
                 line = line_at(analysis.lines, t)

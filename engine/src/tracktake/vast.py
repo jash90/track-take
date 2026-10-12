@@ -198,6 +198,9 @@ def search_offers(s: VastSettings, run: Runner = run_cli, limit: int = 5) -> lis
     offers = [Offer.from_raw(o) for o in raw]
     ok = [o for o in offers if o.dph <= s.max_dph * max(1, s.gpus) and o.download_cost <= s.max_download_cost
           and (not o.ram_gb or o.ram_gb >= RAM_PER_GPU_GB * max(1, o.gpus) * 0.95)]
+    # a host measured below the download threshold would fail the probe again (Oregon 71063: 15 MB/s twice)
+    speeds = nethistory.history().host_speed
+    ok = [o for o in ok if speeds.get(o.machine_id, s.min_download_mbs) >= s.min_download_mbs]
     # preferred regions first (the model download is the slowest part of a worker's start); anywhere as a fallback
     near = [o for o in ok if in_regions(o.location, s)]
     return sorted(near or ok, key=lambda o: offer_cost(o, s))[:limit]

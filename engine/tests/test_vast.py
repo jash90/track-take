@@ -142,7 +142,7 @@ def test_ranking_prefers_fast_hosts_and_avoids_failed_ones(tmp_path):
                 "inet_down": 900, "disk_space": 500, "geolocation": loc, "inet_down_cost": 0.001, "num_gpus": 1}
     offers = [raw(1, 11, "Texas, US", 0.40), raw(2, 22, "Virginia, US", 0.41), raw(3, 33, "Ohio, US", 0.40)]
     nethistory.HISTORY.write_text("\n".join(_json.dumps(r) for r in [
-        {"machine_id": 11, "location": "Texas, US", "measured_mb_s": 20.0},   # measured slow before
+        {"machine_id": 11, "location": "Texas, US", "measured_mb_s": 80.0},   # measured slow (above the cut-off)
         {"machine_id": 33, "location": "Ohio, US", "error": "SSH did not come up"},
         {"machine_id": 33, "location": "Ohio, US", "error": "SSH did not come up"},
     ]) + "\n")
@@ -171,3 +171,22 @@ def test_destroy_treats_missing_instance_as_gone(tmp_path, monkeypatch):
 
     with pytest.raises(vast.VastError):
         vast.destroy(st, run=broken)
+
+
+def test_hosts_measured_below_the_download_threshold_are_skipped():
+    import json as _json
+
+    from tracktake import nethistory, vast
+    from tracktake.config import VastSettings
+
+    nethistory.HISTORY.write_text(_json.dumps({"machine_id": 71063, "location": "Oregon, US", "measured_mb_s": 15.4})
+                                  + "\n")
+    nethistory._CACHE = None
+
+    def raw(i, machine, dph):
+        return {"id": i, "machine_id": machine, "gpu_name": "RTX 4090", "dph_total": dph, "reliability2": 0.99,
+                "inet_down": 900, "disk_space": 500, "geolocation": "Oregon, US", "inet_down_cost": 0.001,
+                "num_gpus": 1}
+    offers = [raw(1, 71063, 0.30), raw(2, 5, 0.45)]
+    found = vast.search_offers(VastSettings(max_dph=1.0), run=lambda a: _json.dumps(offers), limit=5)
+    assert [o.id for o in found] == [2]
