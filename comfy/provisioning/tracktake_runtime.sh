@@ -2,6 +2,7 @@
 # Runs ON a Vast worker (piped over ssh by tracktake.remote): what the engine scripts need besides ComfyUI.
 # Usage: bash -s -- <remote_root> [analysis]
 set -euo pipefail
+export PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1
 ROOT=$1; WITH_ANALYSIS=${2:-}
 mkdir -p "$ROOT/logs"
 

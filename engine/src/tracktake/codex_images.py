@@ -11,7 +11,6 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,9 +26,14 @@ class ImageJob:
     orientation: str  # landscape | portrait
     refs: list[Path] = field(default_factory=list)
     previous: Path | None = None  # keyframe of the shot this one continues (attached once it exists)
+    anchor: Path | None = None  # first keyframe of the same location earlier in the video (after a cut)
 
     def attachments(self) -> list[Path]:
-        return [*self.refs, *([self.previous] if self.previous and self.previous.exists() else [])]
+        extra = [x for x in (self.previous, self.anchor) if x and x.exists()]
+        return [*self.refs, *dict.fromkeys(extra)]
+
+    def depends_on(self) -> list[Path]:
+        return [x for x in (self.previous, self.anchor) if x]
 
 
 def _instruction(job: ImageJob) -> str:
@@ -43,6 +47,10 @@ def _instruction(job: ImageJob) -> str:
                  "same place, set pieces, lighting, palette, weather and character (same clothes, same hair), built "
                  "from the same paper pieces; change only what the scene below describes (where the camera moved, how "
                  "the action progressed). It must look like a later frame of the same film, not a new illustration. ")
+    if job.anchor in files and job.anchor != job.previous:
+        refs += (f"Attached image {files.index(job.anchor) + 1} shows THE SAME LOCATION earlier in the video: keep its "
+                 "layout, furniture, objects and colours exactly (the same bed, table, window, door, the same number "
+                 "and size of everything); the camera angle and what happens may differ. ")
     return (f"Use your image generation tool to create ONE {job.orientation} image ({SIZES[job.orientation]}) and save "
             f"it to ./{job.out.name}. {refs}{job.prompt} No text, no letters, no labels, no watermark, no border. "
             "Do not do anything else and do not modify any other file.")
@@ -91,13 +99,28 @@ def chains(jobs: list[ImageJob]) -> list[list[ImageJob]]:
 
 
 def generate_all(jobs: list[ImageJob], workers: int = 4, on_done=None, should_stop=None) -> dict[str, float | str]:
-    """Generate chains in parallel (each chain in order); returns {file name: seconds or error message}.
+    """Generate in parallel, each job only after the jobs of this batch it depends on (the previous moment of its
+    take, the first frame of its location) have finished or failed; returns {file name: seconds or error}.
     `should_stop()` cancels the images not started yet."""
     results: dict[str, float | str] = {}
-    lock = threading.Lock()
+    batch = {job.out for job in jobs}
+    pending = list(jobs)
+    cond = threading.Condition()
 
-    def run(chain: list[ImageJob]) -> None:
-        for job in chain:
+    def ready(job: ImageJob) -> bool:
+        return all(d not in batch or d.name in results for d in job.depends_on())
+
+    def worker() -> None:
+        while True:
+            with cond:
+                while True:
+                    if not pending:
+                        return
+                    job = next((j for j in pending if ready(j)), None)
+                    if job is not None:
+                        pending.remove(job)
+                        break
+                    cond.wait()
             if should_stop and should_stop():
                 result: float | str = "CANCELLED"
             else:
@@ -105,12 +128,15 @@ def generate_all(jobs: list[ImageJob], workers: int = 4, on_done=None, should_st
                     result = round(generate(job), 1)
                 except Exception as e:  # noqa: BLE001 - one failed image must not stop the batch
                     result = f"ERROR {e}"
-            with lock:
+            with cond:
                 results[job.out.name] = result
                 if on_done:
                     on_done(job, result)
+                cond.notify_all()
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for fut in [pool.submit(run, c) for c in sorted(chains(jobs), key=len, reverse=True)]:
-            fut.result()
+    threads = [threading.Thread(target=worker) for _ in range(max(1, workers))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     return results

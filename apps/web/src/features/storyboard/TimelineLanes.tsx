@@ -47,9 +47,10 @@ interface ShotsLaneProps {
   current: number;
   thumbs: Record<string, string | null>;
   onPick: (id: string, additive: boolean) => void;
+  locationNames?: Record<string, string>;
 }
 
-export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary, current, thumbs, onPick }: ShotsLaneProps) {
+export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary, current, thumbs, onPick, locationNames }: ShotsLaneProps) {
   const t = useT();
   return (
     <div className="relative" style={{ height: SHOTS_H }} role="listbox" aria-label={t("tl.shotsAria")} aria-multiselectable>
@@ -72,7 +73,7 @@ export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary
             aria-selected={isSel}
             tabIndex={s.id === primary ? 0 : -1}
             data-shot={s.id}
-            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? t("tl.cut") : t("tl.continuous")}${written ? "" : ` · ${t("tl.unwritten")}`}`}
+            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? t("tl.cut") : t("tl.continuous")}${written ? "" : ` · ${t("tl.unwritten")}`}${s.location ? ` · ${t("tl.location", { name: locationNames?.[s.location] ?? s.location })}` : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               onPick(s.id, e.metaKey || e.ctrlKey || e.shiftKey);

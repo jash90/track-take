@@ -36,6 +36,11 @@ def pulses(analysis: Analysis, n_frames: int, fps: float) -> Pulses:
     )
 
 
+def still(n_frames: int) -> Pulses:
+    """No beat-driven camera motion: every pulse track stays at 0."""
+    return Pulses(kick=[0.0] * n_frames, snare=[0.0] * n_frames, beat=[0.0] * n_frames)
+
+
 def render(
     shots: list[Shot],
     cadence: list[int],
@@ -48,11 +53,14 @@ def render(
     t1: float,
     audio: str | Path | None = None,
     captions: bool = True,
+    beat_motion: bool = True,
 ) -> dict:
-    """Render frames [t0, t1) of the song. Shot frames are absolute song frames; `cadence[i]` is shot i's hold."""
+    """Render frames [t0, t1) of the song. Shot frames are absolute song frames; `cadence[i]` is shot i's hold.
+    `captions=False` leaves out the karaoke lyrics; `beat_motion=False` keeps the camera still on the beat
+    (no downbeat pump, no snare shake)."""
     f0, f1 = frame_at(t0, fps), frame_at(t1, fps)
     total = frame_at(analysis.duration, fps) + 1
-    p = pulses(analysis, total, fps)
+    p = pulses(analysis, total, fps) if beat_motion else still(total)
     beat_frames = frames_of(analysis.beats, fps)
     plans = [drawing_frames(s.start_frame, s.end_frame, c, forced=beat_frames, min_hold=2) for s, c in zip(shots, cadence, strict=True)]
     started = time.monotonic()

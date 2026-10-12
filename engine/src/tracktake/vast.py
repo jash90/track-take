@@ -57,13 +57,14 @@ class Offer:
     disk_gb: float
     location: str
     download_cost: float = 0.0  # USD per GB
+    gpus: int = 1
 
     @classmethod
     def from_raw(cls, o: dict) -> Offer:
         return cls(int(o["id"]), str(o.get("gpu_name", "")), float(o.get("dph_total", 0.0)),
                    float(o.get("reliability2", o.get("reliability", 0.0))), float(o.get("inet_down", 0.0)),
                    float(o.get("disk_space", 0.0)), str(o.get("geolocation", "")),
-                   float(o.get("inet_down_cost", 0.0) or 0.0))
+                   float(o.get("inet_down_cost", 0.0) or 0.0), int(o.get("num_gpus", 1) or 1))
 
     def setup_cost(self, download_gb: float) -> float:
         """USD to download the models onto this host (billed per GB on top of the hourly price)."""
@@ -86,6 +87,7 @@ class State:
     created_at: float = 0.0
     name: str = "main"
     local_port: int = 0
+    gpus: int = 1  # one ComfyUI per GPU, on remote_port + i
 
     def save(self) -> None:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -107,24 +109,79 @@ def all_states() -> list[State]:
 
 
 def offer_query(s: VastSettings) -> str:
-    return (f"gpu_name={s.gpu} num_gpus=1 verified=true rentable=true direct_port_count>=1 "
-            f"reliability>{s.min_reliability} inet_down>{s.min_inet_down} disk_space>={s.disk_gb} cuda_max_good>=12.8 "
+    return (f"gpu_name={s.gpu} num_gpus={s.gpus} verified=true rentable=true direct_port_count>=1 "
+            f"reliability>{s.min_reliability} inet_down>{s.min_inet_down} disk_space>={s.disk_gb} cuda_max_good>=13.0 "
             f"inet_down_cost<={s.max_download_cost}")  # >=12.4 returns nothing for RTX 5090 (API quirk); Blackwell needs 12.8 anyway
+
+
+MIN_VRAM_GB = 24  # Wan 2.2 14B fp8 with its text encoder needs ~22 GB of VRAM
+DLPERF_4090 = 92.0  # Vast's median DLPerf per RTX 4090, the card the clip timings were measured on
+
+
+def matches(o: dict, s: VastSettings) -> bool:
+    """The host filters of offer_query, applied to a raw offer (GPU model and count aside)."""
+    return (o.get("direct_port_count", 0) >= 1 and o.get("reliability2", o.get("reliability", 0)) > s.min_reliability
+            and o.get("inet_down", 0) > s.min_inet_down and o.get("disk_space", 0) >= s.disk_gb
+            and (o.get("cuda_max_good") or 0) >= 13.0 and (o.get("inet_down_cost") or 0) <= s.max_download_cost)
+
+
+def gpu_catalog(s: VastSettings, speeds: dict[str, float], run: Runner = run_cli) -> list[dict]:
+    """Every GPU model on offer right now, for choosing the card: how many offers pass our host filters, prices per
+    host size (1, 2, 4, 8 GPUs), VRAM and the clip speed relative to an RTX 4090 (measured where known, else
+    estimated from DLPerf, damped because Wan inference gains less than Vast's training benchmark)."""
+    raw = json.loads(run(["search", "offers", "rentable=true verified=true gpu_ram>=16", "-o", "dph_total",
+                          "--limit", "3000", "--storage", str(s.disk_gb), "--raw"]))
+    groups: dict[str, list[dict]] = {}
+    for o in raw:
+        groups.setdefault(str(o.get("gpu_name", "?")), []).append(o)
+    out = []
+    for label, offers in groups.items():
+        key = label.replace(" ", "_")
+        good = [o for o in offers if matches(o, s)]
+        per_gpu = sorted(o["dph_total"] / max(1, o["num_gpus"]) for o in (good or offers))
+        dlperf = sorted(o.get("dlperf", 0) / max(1, o["num_gpus"]) for o in offers)[len(offers) // 2]
+        hosts: dict[int, list[float]] = {}
+        for o in good:
+            hosts.setdefault(int(o["num_gpus"]), []).append(o["dph_total"])
+        vram = round(max(o.get("gpu_ram", 0) for o in offers) / 1024)
+        cc = max(int(o.get("compute_cap") or 0) for o in offers)  # 800 = Ampere; older cards lack fast fp8/bf16 paths
+        speed = speeds[key] if key in speeds else (dlperf / DLPERF_4090) ** 0.7 if dlperf else 0.0
+        out.append({
+            "gpu": key, "label": label, "vram_gb": vram, "suitable": vram >= MIN_VRAM_GB and cc >= 800,
+            "offers": len(offers), "matching": len(good),
+            "min_dph_per_gpu": round(per_gpu[0], 3), "median_dph_per_gpu": round(per_gpu[len(per_gpu) // 2], 3),
+            "hosts": [{"gpus": n, "offers": len(p), "min_dph": round(min(p), 3)} for n, p in sorted(hosts.items())],
+            "speed": round(speed, 2), "speed_measured": key in speeds,
+            # what one RTX-4090-hour of clip work costs on this card: the "cheapest video" ranking
+            "usd_per_4090_hour": round(per_gpu[0] / speed, 3) if speed else None,
+        })
+    return sorted(out, key=lambda g: (not g["suitable"], -g["matching"], -g["offers"]))
+
+
+_SEARCH_CACHE: dict[tuple, tuple[float, list]] = {}
+SEARCH_TTL = 60.0  # an estimate asks for 1/2/4 cards in a row; offers barely move within a minute
 
 
 def search_offers(s: VastSettings, run: Runner = run_cli, limit: int = 5) -> list[Offer]:
     """Cheapest matching offers at or below max_dph."""
-    raw = json.loads(run(["search", "offers", offer_query(s), "-o", "dph_total", "--limit", "500",
-                          "--storage", str(s.disk_gb), "--raw"]))  # price incl. our disk; default limit truncates
+    key = (offer_query(s), s.disk_gb)
+    hit = _SEARCH_CACHE.get(key) if run is run_cli else None
+    if hit and time.monotonic() - hit[0] < SEARCH_TTL:
+        raw = hit[1]
+    else:
+        raw = json.loads(run(["search", "offers", offer_query(s), "-o", "dph_total", "--limit", "500",
+                              "--storage", str(s.disk_gb), "--raw"]))  # price incl. our disk; default limit truncates
+        if run is run_cli:
+            _SEARCH_CACHE[key] = (time.monotonic(), raw)
     offers = [Offer.from_raw(o) for o in raw]
-    ok = [o for o in offers if o.dph <= s.max_dph and o.download_cost <= s.max_download_cost]
+    ok = [o for o in offers if o.dph <= s.max_dph * max(1, s.gpus) and o.download_cost <= s.max_download_cost]
     # cheapest for a ~1 h job including the model download
     return sorted(ok, key=lambda o: o.dph + o.setup_cost(s.download_gb))[:limit]
 
 
 def create(offer: Offer, s: VastSettings, run: Runner = run_cli, name: str = "main", local_port: int = 0) -> State:
-    if offer.dph > s.max_dph:
-        raise VastError(f"offer {offer.id} costs ${offer.dph:.3f}/h, above max_dph ${s.max_dph:.2f}")
+    if offer.dph > s.max_dph * max(1, offer.gpus):
+        raise VastError(f"offer {offer.id} costs ${offer.dph:.3f}/h, above max_dph ${s.max_dph:.2f} per GPU")
     out = json.loads(run(["create", "instance", str(offer.id), "--image", s.image, "--disk", str(s.disk_gb),
                           "--ssh", "--direct", "--label", LABEL, "--raw"]))
     if not out.get("success"):
@@ -132,12 +189,12 @@ def create(offer: Offer, s: VastSettings, run: Runner = run_cli, name: str = "ma
             run(["destroy", "instance", str(out["new_contract"]), "-y"])
         raise VastError(f"create failed: {out.get('msg') or out.get('error') or 'success=false'}")
     state = State(int(out["new_contract"]), offer.dph, created_at=time.time(), name=name,
-                  local_port=local_port or s.local_port)
+                  local_port=local_port or s.local_port, gpus=offer.gpus)
     state.save()
     return state
 
 
-def wait_running(state: State, run: Runner = run_cli, timeout: float = 900, poll: float = 10) -> State:
+def wait_running(state: State, run: Runner = run_cli, timeout: float = 600, poll: float = 10) -> State:
     """Poll until the instance runs, then record its direct SSH endpoint."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -239,8 +296,12 @@ class SlowHost(VastError):
 
 def download_speed(state: State, s: VastSettings, mb: int = 1024, max_seconds: int = 45) -> float:
     """MB/s the worker really gets from Hugging Face (the advertised host bandwidth says little about it)."""
-    cmd = (f"curl -sL -o /dev/null -r 0-{mb * 1024 * 1024 - 1} --max-time {max_seconds} "
-           f"-w '%{{speed_download}}' {PROBE_URL}")
+    # python3, not curl: the runtime image has no curl until provisioning installs it
+    py = (f"import time,urllib.request as u;r=u.urlopen(u.Request({PROBE_URL!r},headers={{'Range':'bytes=0-"
+          f"{mb * 1024 * 1024 - 1}'}}),timeout=30);t=time.time();n=0\n"
+          f"while time.time()-t<{max_seconds}:\n b=r.read(1<<20)\n if not b:break\n n+=len(b)\n"
+          f"print(n/max(time.time()-t,1e-3))")
+    cmd = f"python3 -c {shlex.quote(py)}"
     r = subprocess.run([*ssh_base(state, s), cmd], capture_output=True, text=True, timeout=max_seconds + 60,
                        check=False)
     try:
@@ -250,7 +311,7 @@ def download_speed(state: State, s: VastSettings, mb: int = 1024, max_seconds: i
 
 
 def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, spares: int = 3,
-               straggler_wait: float = 480) -> list[State]:
+               straggler_wait: float = 480, prefix: str = "", tunnel: bool = True) -> list[State]:
     """Rent `count` workers from one search (cheapest incl. model download, network breaks ties) and provision
     them in parallel. Each new host first downloads 1 GB from Hugging Face; one slower than `min_download_mbs` is
     destroyed and the slot takes the next offer (up to `spares` replacements in total); so does a host that never
@@ -264,6 +325,8 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
     pick, reserve = ranked[:count], ranked[count:count + spares]
     if not pick:
         raise VastError(f"no {s.gpu} offer matches (max ${s.max_dph}/h, download <= ${s.max_download_cost}/GB)")
+    if len(pick) < count:
+        log(f"only {len(pick)} matching {s.gpu} offer(s) for {count} machines: running on {len(pick)}")
     for o in pick:
         log(f"offer {o.id} {o.gpu} ${o.dph:.3f}/h + download ${o.setup_cost(s.download_gb):.2f} "
             f"net {o.inet_down:.0f} Mb/s {o.location}")
@@ -276,7 +339,7 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
             raise VastError("dropped: the job started without this worker")
 
     def bring_up(slot: int, offer: Offer) -> None:
-        name, port = f"w{slot + 1}", s.local_port + 1 + slot
+        name, port = f"{prefix}w{slot + 1}", s.local_port + 1 + slot  # prefix: concurrent jobs never share names
         while offer is not None:
             try:
                 st = create(offer, s, run=run, name=name, local_port=port)
@@ -300,7 +363,7 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
                         raise SlowHost(f"{speed:.0f} MB/s < {s.min_download_mbs:.0f} MB/s")
                 dropped()
                 provision(st, s)
-                if s.models:
+                if s.models and tunnel:  # remote jobs talk to ComfyUI on the worker itself, no tunnel needed
                     st = open_tunnel(st, s)
                 with lock:
                     if give_up.is_set():

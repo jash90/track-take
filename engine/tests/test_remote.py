@@ -96,3 +96,13 @@ def test_authorize_key_survives_missing_final_newline(tmp_path):
     for _ in range(2):  # idempotent
         subprocess.run(["bash", "-c", cmd.replace("mkdir -p ~/.ssh && ", "")], check=True)
     assert keys.read_text().splitlines() == ["ssh-ed25519 AAAAaccount me@mac", "ssh-ed25519 AAAAgather root@w3"]
+
+
+def test_multi_gpu_host_gets_more_shots_and_all_comfy_urls():
+    big, small = workers(2)
+    big.gpus = 4
+    plan = remote.plan(SHOTS, [big, small], ("landscape",))
+    by = {a.worker.name: a for a in plan}
+    assert len(by["w1"].shots) > 3 * len(by["w2"].shots)
+    cmd = remote.shard_command(by["w1"], "codex")
+    assert all(f"http://127.0.0.1:{18188 + i}" in cmd for i in range(4)) and "18192" not in cmd

@@ -19,7 +19,12 @@ FRAMING = {
 
 def shot_prompt(sb: dict, shot: dict, orientation: str) -> str:
     who = f" The woman is {sb['heroine']}." if sb.get("heroine") and "woman" in shot["scene"] else ""
-    return f"Scene: {shot['scene']}{who} {FRAMING[orientation]} Style: {sb['style']}."
+    places = {e["id"]: e["look"] for e in sb.get("locations", [])}
+    things = {e["id"]: e["look"] for e in sb.get("props", [])}
+    where = f" Setting (keep exactly as described): {places[shot['location']]}." if shot.get("location") in places else ""
+    props = [things[x] for x in shot.get("props", []) if x in things]
+    objects = f" Objects (keep exactly as described): {'; '.join(props)}." if props else ""
+    return f"Scene: {shot['scene']}{who}{where}{objects} {FRAMING[orientation]} Style: {sb['style']}."
 
 
 def character_sheet(p: Project, force: bool = False) -> float:
@@ -46,6 +51,10 @@ def codex_jobs(p: Project, shots: list[str] | None = None, orientations: list[st
     if empty:
         raise ValueError(f"shots without a scene: {', '.join(empty[:8])}")
     jobs = []
+    first_at: dict[str, str] = {}  # location id -> the shot that first shows it
+    for shot in sb["shots"]:
+        if shot.get("location"):
+            first_at.setdefault(shot["location"], shot["id"])
     for i, shot in enumerate(sb["shots"]):
         if shots and shot["id"] not in shots:
             continue
@@ -58,7 +67,9 @@ def codex_jobs(p: Project, shots: list[str] | None = None, orientations: list[st
                 thumb(p, "codex", shot["id"], o, drop=True)
             if not out.exists():
                 previous = None if is_cut(sb["shots"], i) else p.key_path("codex", sb["shots"][i - 1]["id"], o)
-                jobs.append(ImageJob(out, shot_prompt(sb, shot, o), o, refs, previous))
+                first = first_at.get(shot.get("location", ""))
+                anchor = p.key_path("codex", first, o) if first and first != shot["id"] else None
+                jobs.append(ImageJob(out, shot_prompt(sb, shot, o), o, refs, previous, anchor))
     return jobs
 
 

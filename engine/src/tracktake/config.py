@@ -29,14 +29,15 @@ class VideoSettings(BaseModel):
 
 class VastSettings(BaseModel):
     gpu: str = "RTX_4090"
-    max_dph: float = 0.6
+    gpus: int = 1  # GPUs per host; >1 runs one ComfyUI per GPU on a shared model download
+    max_dph: float = 0.6  # USD per hour per GPU (a host with N GPUs may cost N times this)
     min_reliability: float = 0.98
     min_inet_down: int = 500
     max_download_cost: float = 0.006  # USD per GB downloaded; some hosts charge 10x more and models are ~60 GB
     download_gb: float = 60.0  # what provisioning downloads per instance, priced into each offer
     min_download_mbs: float = 40.0  # measured Hugging Face speed below this (MB/s) -> drop the host, take the next
     disk_gb: int = 120
-    image: str = "pytorch/pytorch:@vastai-automatic-tag"
+    image: str = "pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime"
     comfy_repo: str = "https://github.com/comfyanonymous/ComfyUI"
     comfy_commit: str = "0df64eb"
     remote_port: int = 18188

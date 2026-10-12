@@ -4,13 +4,20 @@ import { Dialog } from "./Dialog";
 import { Chip, ErrorBox, Loading } from "./ui";
 import { VastKeyForm } from "./VastKeyForm";
 import { useT } from "../i18n";
+import { SetupChecklist } from "../features/autopilot/SetupChecklist";
 
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const vast = useVast();
   const t = useT();
   return (
     <Dialog open={open} onClose={onClose} title={t("settings.title")}>
-      <section className="flex flex-col gap-4">
+      <section className="mb-6 flex flex-col gap-3">
+        <div>
+          <div className="eyebrow">{t("setup.title")}</div>
+        </div>
+        {open && <SetupChecklist />}
+      </section>
+      <section className="flex flex-col gap-4 border-t border-ink-700 pt-5">
         <div className="flex items-center justify-between">
           <div>
             <div className="eyebrow">{t("settings.cloud")}</div>
@@ -33,7 +40,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </dl>
             )}
             {vast.data.error && <ErrorBox title={t("vast.errorTitle")} error={vast.data.error} />}
-            <VastKeyForm replacing={vast.data.configured} />
+            {vast.data.configured && <VastKeyForm replacing />}
           </>
         )}
       </section>

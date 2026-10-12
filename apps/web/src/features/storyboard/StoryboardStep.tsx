@@ -7,18 +7,19 @@ import type { KeySet, Storyboard } from "../../api/types";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import { useToast } from "../../components/Toaster";
-import { Button, Empty, ErrorBox, InlineError, Loading, ProgressBar, StepHeader } from "../../components/ui";
+import { Button, Empty, NextStepLink, ErrorBox, InlineError, Loading, ProgressBar, StepHeader } from "../../components/ui";
 import { errorMessage } from "../../lib/format";
 import { projectOrientation } from "../../lib/orientation";
 import { continuitySummary } from "../../lib/continuity";
 import { activeJob, useWorkspace } from "../workspace/context";
-import { DirectorPanel } from "./DirectorPanel";
+import { StoryboardSide } from "./StoryboardSide";
 import { ShotEditor } from "./ShotEditor";
 import { Timeline } from "./Timeline";
 import { useAudioTransport } from "./useAudioTransport";
 import { useStoryboardDraft } from "./useStoryboardDraft";
 import { Trans, useT } from "../../i18n";
 import { jobTitle } from "../jobs/jobTitle";
+import { shotLightbox } from "./shotLightbox";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
@@ -53,6 +54,7 @@ export function StoryboardStep() {
     if (!primary && shots[0]) setPrimary(shots[0].id);
   }, [primary, shots]);
 
+  const locationNames = useMemo(() => Object.fromEntries((draft?.locations ?? []).map((l) => [l.id, l.name])), [draft?.locations]);
   const thumbs = useMemo(() => {
     const out: Record<string, string | null> = {};
     const sets = keysQ.data?.sets;
@@ -146,18 +148,7 @@ export function StoryboardStep() {
     },
   );
 
-  const openImage = (set: KeySet) => {
-    if (!shot) return;
-    const items: LightboxItem[] = [];
-    let index = 0;
-    for (const s of ["codex", "comfy"] as KeySet[]) {
-      const src = keysQ.data?.sets[s]?.[shot.id]?.[orientation];
-      if (!src) continue;
-      if (s === set) index = items.length;
-      items.push({ src, caption: `${shot.id} · ${s === "codex" ? "Codex" : "ComfyUI"} · ${orientation === "landscape" ? "16:9" : "9:16"}` });
-    }
-    setLightbox({ items, index });
-  };
+  const openImage = (set: KeySet) => shot && setLightbox(shotLightbox(keysQ.data, shot.id, orientation, set));
 
   const noAnalysis = !analysis.data && (!project.stage.analysis || isNotFound(analysis.error));
   if (!noAnalysis && analysis.isPending) return <Loading label={t("analysis.loading")} />;
@@ -186,8 +177,8 @@ export function StoryboardStep() {
             <Button variant="secondary" disabled={!dirty || !!writing} busy={save.isPending} onClick={() => save.mutate()}>
               {dirty ? t("common.save") : t("common.saved")}
             </Button>
-            <Button variant="secondary" busy={plan.isPending} disabled={busyAny || !!writing} onClick={() => setConfirmPlan(true)}>
-              {t("sb.plan")}
+            <Button variant="secondary" busy={plan.isPending} disabled={busyAny || !!writing} onClick={() => (noStoryboard ? plan.mutate() : setConfirmPlan(true))}>
+              {noStoryboard ? t("sb.planFirst") : t("sb.plan")}
             </Button>
             <Button variant="primary" busy={write.isPending || !!writing} disabled={noStoryboard || busyAny} onClick={() => write.mutate(undefined)}>
               {t("sb.write")}
@@ -233,6 +224,7 @@ export function StoryboardStep() {
         primary={primary}
         onPick={pickAndSeek}
         thumbs={thumbs}
+        locationNames={locationNames}
         transport={transport}
       />
       {peaks.isError && <p className="mt-2 text-[0.75rem] text-err">{t("sb.peaksError", { error: errorMessage(peaks.error) })}</p>}
@@ -241,7 +233,7 @@ export function StoryboardStep() {
         <div>
           {sbQ.isPending && !noStoryboard && <Loading label={t("sb.loading")} />}
           {noStoryboard && (
-            <Empty title={t("sb.empty")} action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>{t("sb.plan")}</Button>}>
+            <Empty title={t("sb.empty")} action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>{t("sb.planFirst")}</Button>}>
               {t("sb.emptyBody")}
             </Empty>
           )}
@@ -252,6 +244,7 @@ export function StoryboardStep() {
               total={shots.length}
               keys={{ codex: keysQ.data?.sets.codex?.[shot.id], comfy: keysQ.data?.sets.comfy?.[shot.id] }}
               orientation={orientation}
+              world={{ locations: draft?.locations ?? [], props: draft?.props ?? [] }}
               disabled={!!writing}
               onChange={(patch) => updateShot(shot.id, patch)}
               onStep={step}
@@ -264,18 +257,25 @@ export function StoryboardStep() {
           )}
         </div>
         {draft && (
-          <DirectorPanel
+          <StoryboardSide
+            projectId={id}
             draft={draft}
-            disabled={!!writing}
+            dirty={dirty}
+            writing={!!writing}
+            checking={activeJob(jobs, "continuity")}
             instructions={instructions}
             onInstructions={setInstructions}
             onChange={update}
             selectedCount={selected.size}
-            busy={write.isPending}
+            rewriteBusy={write.isPending}
             onRewrite={() => write.mutate([...selected])}
+            onJump={(sid) => pickAndSeek(sid, false)}
+            onJobStarted={openJobs}
           />
         )}
       </div>
+
+      {draft && <NextStepLink to="../klatki" />}
 
       <ConfirmDialog
         open={confirmPlan}

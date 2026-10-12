@@ -17,7 +17,9 @@ max_dph = 0.60                   # refuse offers above this many USD per hour
 min_reliability = 0.98
 min_inet_down = 500              # Mbit/s; models are ~45 GB, slow hosts waste paid minutes
 disk_gb = 120
-image = "pytorch/pytorch:@vastai-automatic-tag"
+# runtime image (3.3 GB): "@vastai-automatic-tag" picked the 13.8 GB devel image, whose pull alone took >15 min on
+# hosts without it cached. Needs a host driver with CUDA >= 13.0 (~90% of 4090/5090 offers).
+image = "pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime"
 # ComfyUI on the instance is pinned to the same commit as the local install, so graphs validated here run there
 comfy_repo = "https://github.com/comfyanonymous/ComfyUI"
 comfy_commit = "0df64eb"

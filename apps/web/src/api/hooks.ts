@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, isNotFound, qk } from "./client";
+import { api, isNotFound, qk, type EstimateChoice } from "./client";
 import type { Job, KeySet } from "./types";
 
 const ACTIVE: ReadonlySet<Job["status"]> = new Set(["queued", "running"]);
@@ -52,14 +52,26 @@ export function useVideos(id: string) {
   return useQuery({ queryKey: qk.videos(id), queryFn: () => api.videos(id), retry: retryUnless404 });
 }
 
-export function useEstimate(id: string, set: KeySet, workers: number, enabled: boolean) {
+export function useEstimate(id: string, set: KeySet, workers: number, enabled: boolean, choice: EstimateChoice = {}) {
   return useQuery({
-    queryKey: qk.estimate(id, set, workers),
-    queryFn: () => api.estimate(id, set, workers),
+    queryKey: qk.estimate(id, set, workers, choice),
+    queryFn: () => api.estimate(id, set, workers, choice),
     enabled,
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+}
+
+export function useRenderPresets(id: string, enabled = true) {
+  return useQuery({ queryKey: qk.renderPresets(id), queryFn: () => api.renderPresets(id), enabled, staleTime: 60_000, retry: 1 });
+}
+
+export function useSetup(enabled = true) {
+  return useQuery({ queryKey: qk.setup, queryFn: api.setup, enabled, staleTime: 30_000, retry: 1 });
+}
+
+export function useVastGpus() {
+  return useQuery({ queryKey: qk.vastGpus, queryFn: api.vastGpus, staleTime: 5 * 60_000, retry: 1 });
 }
 
 export function useVast(poll = false) {

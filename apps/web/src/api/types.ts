@@ -8,7 +8,10 @@ export type FormatName = "16x9" | "9x16";
 export interface ProjectSettings {
   workers: number; // Vast cards for the render
   gpu: string; // e.g. "RTX_4090"
-  max_dph: number; // USD per hour cap per card
+  gpus: number; // GPUs per machine (host); >1 = one machine with N GPUs, one model download
+  max_dph: number; // USD per hour cap per GPU (a host with N GPUs may cost up to N × max_dph)
+  captions: boolean; // karaoke lyrics burned into the video (default true)
+  beat_motion: boolean; // camera pump on downbeats + shake on snares (default true)
 }
 
 export interface Project {
@@ -30,7 +33,60 @@ export interface Project {
     videos: Record<KeySet, FormatName[]>; // formats rendered per set
   };
   settings: ProjectSettings;
+  storyboard_approved?: boolean; // reset to false when the storyboard is (re)planned or (re)written
+  autopilot?: Autopilot | Record<string, never>; // {} when never started
 }
+
+export type RenderPresetId = "cheapest" | "recommended" | "fastest";
+/** what the user picked: one of the presets, or "custom" = the project's saved gpu/gpus/max_dph/workers */
+export type PresetChoice = RenderPresetId | "custom";
+export type AutopilotStage = "analyze" | "plan" | "write" | "character" | "keys" | "render";
+export type AutopilotState = "running" | "awaiting_storyboard" | "awaiting_budget" | "done" | "failed" | "cancelled";
+export interface Autopilot {
+  state: AutopilotState;
+  stage: AutopilotStage | null;
+  job: string | null;
+  budget_usd: number;
+  preset: PresetChoice;
+  review: boolean;
+  estimate_usd?: number;
+  estimate_minutes?: number;
+  error?: string;
+  updated: string;
+}
+export interface AutopilotPayload {
+  budget_usd: number;
+  preset: PresetChoice;
+  review: boolean;
+  approve?: boolean;
+}
+// POST /api/projects/{id}/autopilot AutopilotPayload -> Job (kind "autopilot"); runs only the missing steps
+
+export interface RenderPreset {
+  id: RenderPresetId;
+  gpu: string;
+  label: string;
+  gpus: number;
+  workers: number;
+  minutes: number;
+  usd: number;
+  speed: number;
+  speed_measured: boolean;
+  max_dph: number;
+}
+export interface RenderPresets {
+  clips: number;
+  estimated_clips: boolean; // guessed from song length before the storyboard exists
+  presets: RenderPreset[]; // cheapest / recommended / fastest, [] when no offers
+}
+// GET /api/projects/{id}/render-presets -> RenderPresets
+
+export type SetupCheck = "claude" | "codex" | "codex_login" | "ffmpeg" | "vast_key" | "ssh_key" | "ssh_key_on_vast";
+export interface Setup {
+  checks: Record<SetupCheck, boolean | null>;
+  ready: boolean;
+}
+// GET /api/setup -> Setup ; POST /api/setup/ssh-key -> Setup
 
 // GET /api/projects -> Project[]
 // POST /api/projects {name: string, orientation: Orientation, style?: string, language?: string} -> Project
@@ -74,13 +130,30 @@ export interface Shot {
   scene: string; // what the keyframe shows (whole scene, character included)
   motion: string; // what moves in the clip
   hints?: string[]; // non-structural Suno tags of the section, e.g. "Rain" (kept as is)
+  location?: string; // location id from Storyboard.locations
+  props?: string[]; // prop ids from Storyboard.props
   cut?: boolean; // true = shot starts with a hard cut (may change place); false = continues the previous shot (same take: its keyframe is drawn from the previous keyframe and the previous clip is animated to land exactly on it). Missing = cut (old storyboards). s01 is always a cut.
+}
+/** World bible entry: a recurring place or object with a fixed look, kept verbatim in every prompt. */
+export interface WorldItem {
+  id: string;
+  name: string;
+  look: string;
+}
+export interface ContinuityIssue {
+  shot: string;
+  problem: string;
+  before: string; // scene text before the fix
 }
 export interface Storyboard {
   style: string;
   heroine: string; // character description used in every prompt
   shots: Shot[];
+  locations?: WorldItem[];
+  props?: WorldItem[];
+  continuity?: { checked: string; issues: ContinuityIssue[] };
 }
+// POST /api/projects/{id}/storyboard/check -> Job (kind "continuity")
 // GET /api/projects/{id}/storyboard -> Storyboard (404 if none)
 // PUT /api/projects/{id}/storyboard Storyboard -> Storyboard
 // POST /api/projects/{id}/storyboard/plan -> Storyboard  (cut on downbeats, 2 bars/shot; keeps texts of unchanged shots)
@@ -126,21 +199,67 @@ export interface Estimate {
   offers: Offer[]; // cheapest matching offers right now
   missing_keys: number; // keyframes still missing for set=codex (render refuses while > 0)
   alternatives: { workers: number; minutes: number; usd: number }[]; // same job with 1/2/4 cards: fewer = cheaper, slower
+  gpu: string;
+  gpus: number;
+  speed: number; // clip speed vs an RTX 4090
+  speed_measured: boolean; // false = estimated from Vast DLPerf
+  no_offers: boolean; // nothing matches under max_dph
+  max_dph: number;
 }
+// GET /api/projects/{id}/estimate?set=codex&workers=4[&gpu=RTX_5090&gpus=2&max_dph=0.6] -> Estimate
+
+export interface VastHost {
+  gpus: number; // GPUs in the machine
+  offers: number;
+  min_dph: number; // USD/h for the whole host
+}
+export interface VastGpu {
+  gpu: string; // value to save, e.g. "RTX_5090"
+  label: string; // "RTX 5090"
+  vram_gb: number;
+  suitable: boolean; // >= min VRAM and Ampere or newer
+  offers: number; // all rentable
+  matching: number; // pass host filters (reliability, network, download price, CUDA)
+  min_dph_per_gpu: number;
+  median_dph_per_gpu: number;
+  hosts: VastHost[];
+  speed: number; // vs RTX 4090
+  speed_measured: boolean;
+  usd_per_4090_hour: number | null; // lower = cheaper video
+}
+export interface VastGpus {
+  min_vram_gb: number;
+  filters: { min_reliability: number; max_download_usd_per_gb: number; min_inet_down_mbps: number };
+  gpus: VastGpu[];
+}
+// GET /api/vast/gpus -> VastGpus (cached ~5 min server-side)
 // GET /api/projects/{id}/estimate?set=codex&workers=4 -> Estimate
 // POST /api/projects/{id}/render {set: KeySet, workers: number, gpu?: string, max_dph?: number, masters?: boolean, confirm: true} -> Job
 
 export interface VastStatus {
   configured: boolean; // API key present
   balance: number | null; // USD
-  instances: { id: number; name: string; gpu: string; status: string; dph: number }[];
+  instances: VastInstance[];
   error?: string;
 }
 // GET /api/vast -> VastStatus
+
+export interface VastInstance {
+  id: number;
+  name: string;
+  gpu: string;
+  status: string;
+  dph: number;
+  known?: boolean; // started by this app; false = rented elsewhere or orphaned
+  in_use?: boolean; // used by a running render
+  job?: string | null; // id of the running render job using it
+  project?: string | null;
+}
+// POST /api/vast/instances/{id}/down?force=false -> {freed: id, usd}; 409 {detail} when in use (unless force=true)
 // POST /api/vast/key {key: string} -> VastStatus   (stores it like `vastai set api-key`, never echoed back)
 // POST /api/vast/down -> {freed: number, usd: number}
 
-export type JobKind = "analyze" | "storyboard" | "character" | "keys_codex" | "render";
+export type JobKind = "analyze" | "storyboard" | "character" | "keys_codex" | "render" | "autopilot" | "continuity";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export interface Job {
   id: string;

@@ -8,7 +8,17 @@ const num = (v: unknown): number | null => {
 const setName = (v: unknown) => (v === "comfy" ? "ComfyUI" : v === "codex" ? "Codex" : typeof v === "string" ? v : null);
 
 /** Localised job title from kind + params; the backend `title` is only an English fallback. */
-export function jobTitle(job: Pick<Job, "kind" | "params">, t: TFn): string {
+const STAGES = ["analyze", "plan", "write", "character", "keys", "render"] as const;
+export type Stage = (typeof STAGES)[number];
+export const isStage = (v: unknown): v is Stage => typeof v === "string" && (STAGES as readonly string[]).includes(v);
+
+/** "keyframes 12/45" — autopilot stage label with progress when known. */
+export function stageLabel(stage: Stage, t: TFn, progress?: Job["progress"]): string {
+  const label = t(`ap.stage.${stage}`);
+  return progress && progress.total > 0 ? `${label} ${progress.done}/${progress.total}` : label;
+}
+
+export function jobTitle(job: Pick<Job, "kind" | "params"> & { progress?: Job["progress"] }, t: TFn): string {
   const p = job.params ?? {};
   switch (job.kind) {
     case "analyze":
@@ -31,6 +41,12 @@ export function jobTitle(job: Pick<Job, "kind" | "params">, t: TFn): string {
       if (set && workers !== null) return t("job.render.full", { set, count: workers });
       if (set) return t("job.render.set", { set });
       return t("job.render");
+    }
+    case "continuity":
+      return t("job.continuity");
+    case "autopilot": {
+      const stage = p.stage;
+      return isStage(stage) ? t("job.autopilot.stage", { stage: stageLabel(stage, t, job.progress) }) : t("job.autopilot");
     }
   }
 }

@@ -11,7 +11,7 @@ import { useT } from "../../i18n";
 export function NewProjectTile() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
-  const [orientation, setOrientation] = useState<Orientation | null>(null);
+  const [orientation, setOrientation] = useState<Orientation | null>("landscape");
   const qc = useQueryClient();
   const t = useT();
   const navigate = useNavigate();
@@ -23,10 +23,10 @@ export function NewProjectTile() {
       navigate(`/p/${encodeURIComponent(p.id)}/wejscie`);
     },
   });
-  const ready = !!name.trim() && orientation !== null;
+  const ready = orientation !== null;
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (ready && orientation) create.mutate({ name: name.trim(), orientation });
+    if (ready && orientation) create.mutate({ name: name.trim() || t("newProject.defaultName"), orientation });
   };
   const close = () => {
     setEditing(false);
@@ -64,7 +64,7 @@ export function NewProjectTile() {
       <input
         autoFocus
         className="field"
-        placeholder={t("newProject.placeholder")}
+        placeholder={t("newProject.namePlaceholder")}
         aria-label={t("newProject.nameAria")}
         value={name}
         maxLength={80}

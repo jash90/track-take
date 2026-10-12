@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { isStage, stageLabel, type Stage } from "../jobs/jobTitle";
 import type { Job, JobKind, Project } from "../../api/types";
 import { cx } from "../../lib/cx";
 import { formatRatio, projectFormat, renderedSets } from "../../lib/orientation";
@@ -10,6 +11,8 @@ interface Step {
   label: Key;
   status: (p: Project, t: TFn) => { text: string; done: boolean };
   kinds: JobKind[];
+  /** autopilot stages that belong to this step */
+  stages: Stage[];
 }
 
 export const STEPS: Step[] = [
@@ -18,6 +21,7 @@ export const STEPS: Step[] = [
     n: "01",
     label: "step.inputs",
     kinds: ["analyze"],
+    stages: ["analyze"],
     status: (p, t) => {
       const have = [p.inputs.song, p.inputs.cover, p.inputs.lyrics].filter(Boolean).length;
       if (p.stage.analysis) return { text: t("step.inputs.analysed"), done: true };
@@ -29,6 +33,7 @@ export const STEPS: Step[] = [
     n: "02",
     label: "step.storyboard",
     kinds: ["storyboard"],
+    stages: ["plan", "write"],
     status: (p, t) =>
       p.stage.storyboard
         ? { text: t("step.storyboard.written", { written: p.stage.storyboard_written, shots: p.stage.shots }), done: p.stage.shots > 0 && p.stage.storyboard_written >= p.stage.shots }
@@ -39,6 +44,7 @@ export const STEPS: Step[] = [
     n: "03",
     label: "step.keys",
     kinds: ["character", "keys_codex"],
+    stages: ["character", "keys"],
     status: (p) => {
       const total = p.stage.shots;
       const c = p.stage.keys.codex ?? 0;
@@ -50,6 +56,7 @@ export const STEPS: Step[] = [
     n: "04",
     label: "step.video",
     kinds: ["render"],
+    stages: ["render"],
     status: (p, t) => {
       const n = renderedSets(p);
       return { text: n ? t("step.video.rendered") : t("step.video.todo", { ratio: formatRatio(projectFormat(p)) }), done: n > 0 };
@@ -60,6 +67,7 @@ export const STEPS: Step[] = [
     n: "05",
     label: "step.result",
     kinds: [],
+    stages: [],
     status: (p, t) => {
       const n = renderedSets(p);
       return { text: n ? t("step.result.sets", { count: n, ratio: formatRatio(projectFormat(p)) }) : t("step.result.none"), done: n > 0 };
@@ -69,11 +77,17 @@ export const STEPS: Step[] = [
 
 export function Stepper({ project, jobs }: { project: Project; jobs: Job[] }) {
   const t = useT();
+  const pilot = jobs.find((j) => j.kind === "autopilot" && (j.status === "running" || j.status === "queued"));
   return (
     <nav aria-label={t("step.navAria")} className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0.5">
       {STEPS.map((s) => {
         const st = s.status(project, t);
-        const busy = jobs.some((j) => s.kinds.includes(j.kind) && (j.status === "running" || j.status === "queued"));
+        const pilotHere = pilot && isStage(pilot.params?.stage) && s.stages.includes(pilot.params.stage) ? pilot : null;
+        const busy = !!pilotHere || jobs.some((j) => s.kinds.includes(j.kind) && (j.status === "running" || j.status === "queued"));
+        const busyText =
+          pilotHere && isStage(pilotHere.params?.stage)
+            ? `${t("ap.eyebrow")}: ${stageLabel(pilotHere.params.stage, t, pilotHere.progress)}`
+            : t("step.busy");
         return (
           <NavLink
             key={s.to}
@@ -105,7 +119,7 @@ export function Stepper({ project, jobs }: { project: Project; jobs: Job[] }) {
                     ) : (
                       <span className={cx("h-1.5 w-1.5 rounded-full", st.done ? "bg-ok" : "bg-ink-600")} />
                     )}
-                    <span className="truncate">{busy ? t("step.busy") : st.text}</span>
+                    <span className="truncate">{busy ? busyText : st.text}</span>
                   </span>
                 </span>
               </>

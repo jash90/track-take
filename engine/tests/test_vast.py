@@ -89,3 +89,23 @@ def test_config_env_override(tmp_path, monkeypatch):
     assert s.comfy_url == "http://127.0.0.1:8189"
     assert s.video_engine == "wan"
     assert s.vast.models == ["wan22_i2v", "zimage"]
+
+
+def test_gpu_catalog_groups_offers_and_applies_filters():
+    import json as _json
+
+    from tracktake import vast
+    from tracktake.config import VastSettings
+
+    def offer(i, name, n, dph, ok=True, ram=24564, cc=890, dl=80.0):
+        return {"id": i, "gpu_name": name, "num_gpus": n, "dph_total": dph, "gpu_ram": ram, "compute_cap": cc,
+                "dlperf": dl * n, "direct_port_count": 2, "reliability2": 0.99 if ok else 0.5, "inet_down": 900,
+                "disk_space": 500, "cuda_max_good": 13.0, "inet_down_cost": 0.001}
+    raw = [offer(1, "RTX 4090", 1, 0.40), offer(2, "RTX 4090", 8, 3.2), offer(3, "RTX 4090", 1, 0.30, ok=False),
+           offer(4, "RTX 5090", 1, 0.55, ram=32607, dl=160.0), offer(5, "Tesla V100", 1, 0.12, ram=32768, cc=700)]
+    cat = vast.gpu_catalog(VastSettings(), {"RTX_4090": 1.0}, run=lambda args: _json.dumps(raw))
+    by = {g["gpu"]: g for g in cat}
+    assert by["RTX_4090"]["matching"] == 2 and by["RTX_4090"]["offers"] == 3
+    assert [h["gpus"] for h in by["RTX_4090"]["hosts"]] == [1, 8] and by["RTX_4090"]["speed_measured"]
+    assert 1.4 < by["RTX_5090"]["speed"] < 1.6 and not by["RTX_5090"]["speed_measured"]
+    assert by["Tesla_V100"]["suitable"] is False and cat[-1]["gpu"] == "Tesla_V100"

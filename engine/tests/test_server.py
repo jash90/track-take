@@ -13,7 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(project, "PROJECTS", tmp_path / "projects")
     from tracktake import jobs, server
 
-    monkeypatch.setattr(server, "jobs", jobs.JobManager(tmp_path / "jobs.json"))
+    monkeypatch.setattr(server, "jobs", jobs.JobManager(tmp_path / "jobs"))
     return TestClient(server.app)
 
 
@@ -114,3 +114,38 @@ def test_codex_chains_follow_continuity(tmp_path):
     assert chains([lone]) == [[lone]] and lone.attachments() == []
     a.write_bytes(b"x")
     assert lone.attachments() == [a]
+
+
+def test_render_options_are_project_settings(client):
+    pid = client.post("/api/projects", json={"name": "opts"}).json()["id"]
+    s = client.get(f"/api/projects/{pid}").json()["settings"]
+    assert s["captions"] is True and s["beat_motion"] is True
+    s = client.patch(f"/api/projects/{pid}", json={"settings": {"captions": False, "beat_motion": False}}).json()["settings"]
+    assert s["captions"] is False and s["beat_motion"] is False and s["workers"] == 4
+
+
+def test_still_camera_has_no_pulses():
+    from tracktake.render.timeline import still
+
+    p = still(5)
+    assert p.kick == p.snare == p.beat == [0.0] * 5
+
+
+def test_release_one_card_respects_running_render(client, monkeypatch):
+    from tracktake import jobs as jobs_mod
+    from tracktake import server, vast
+    from tracktake.vast import State
+
+    busy, idle = State(1, 0.5, name="jabc123-w1"), State(2, 0.5, name="bench-w1")
+    freed = []
+    monkeypatch.setattr(vast, "all_states", lambda: [busy, idle])
+    monkeypatch.setattr(vast, "destroy", lambda st, run=None: freed.append(st.instance_id) or 0.1)
+    import os
+
+    job = jobs_mod.Job("0123456789ab", "render", "p", "Vast render", status="running", params={"run_id": "jabc123"},
+                       pid=os.getpid())
+    server.jobs.store.write(job)
+    r = client.post("/api/vast/instances/1/down")
+    assert r.status_code == 409 and "0123456789ab" in r.json()["detail"] and freed == []
+    assert client.post("/api/vast/instances/2/down").json()["freed"] == 2 and freed == [2]
+    assert client.post("/api/vast/instances/1/down?force=true").status_code == 200 and freed == [2, 1]

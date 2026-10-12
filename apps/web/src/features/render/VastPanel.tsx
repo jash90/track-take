@@ -5,16 +5,19 @@ import { useVast } from "../../api/hooks";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/Toaster";
 import { Button, Chip, ErrorBox, InlineError, Loading } from "../../components/ui";
-import { VastKeyForm } from "../../components/VastKeyForm";
 import { formatUsd } from "../../lib/format";
 import { useT } from "../../i18n";
+import { VastInstances } from "./VastInstances";
+import { useShell } from "../../components/AppShell";
 
 export function VastPanel() {
   const vast = useVast(true);
   const qc = useQueryClient();
   const toast = useToast();
   const t = useT();
+  const { openSettings } = useShell();
   const [confirm, setConfirm] = useState(false);
+  const inUseCount = vast.data?.instances.filter((i) => i.in_use).length ?? 0;
   const down = useMutation({
     mutationFn: api.vastDown,
     onSuccess: (r) => {
@@ -40,7 +43,11 @@ export function VastPanel() {
       </div>
       {vast.isPending && <Loading label={t("vastPanel.asking")} />}
       {vast.isError && <ErrorBox error={vast.error} onRetry={() => void vast.refetch()} />}
-      {vast.data && !vast.data.configured && <VastKeyForm />}
+      {vast.data && !vast.data.configured && (
+        <button type="button" onClick={openSettings} className="self-start text-sm text-safe underline-offset-4 hover:underline">
+          {t("render.addKey")} →
+        </button>
+      )}
       {vast.data?.error && <ErrorBox title={t("vast.errorTitle")} error={vast.data.error} />}
       {vast.data?.configured && (
         <>
@@ -53,17 +60,7 @@ export function VastPanel() {
             {vast.data.instances.length === 0 ? (
               <p className="text-[0.82rem] text-ink-500">{t("vastPanel.idle")}</p>
             ) : (
-              <ul className="flex flex-col gap-1.5">
-                {vast.data.instances.map((i) => (
-                  <li key={i.id} className="flex items-center gap-3 rounded-md border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-[0.75rem]">
-                    <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-safe" />
-                    <span className="text-ink-200">{i.gpu}</span>
-                    <span className="truncate text-ink-500">{i.name || `#${i.id}`}</span>
-                    <span className="ml-auto text-ink-300">{i.status}</span>
-                    <span className="text-ink-100">{formatUsd(i.dph, 3)}/h</span>
-                  </li>
-                ))}
-              </ul>
+              <VastInstances instances={vast.data.instances} />
             )}
           </div>
           <Button variant="danger" size="sm" className="self-start" disabled={vast.data.instances.length === 0} onClick={() => setConfirm(true)}>
@@ -81,6 +78,11 @@ export function VastPanel() {
         onClose={() => setConfirm(false)}
       >
         {t("vastPanel.releaseBody")}
+        {inUseCount > 0 && (
+          <span className="mt-3 block rounded-lg border border-warn/40 bg-warn/[0.07] px-3 py-2 text-warn">
+            {t("vastPanel.releaseInUseWarn", { count: inUseCount })}
+          </span>
+        )}
         <InlineError error={down.error} />
       </ConfirmDialog>
     </section>

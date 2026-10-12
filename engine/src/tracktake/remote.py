@@ -25,6 +25,11 @@ REMOTE = "/workspace/tracktake"
 PROJECT = f"{REMOTE}/project"
 FULL = f"{PROJECT}/full"
 LOCAL_COMFY = "http://127.0.0.1:18188"
+
+
+def comfy_urls(state: State) -> str:
+    """The worker's ComfyUI instances, one per GPU (ports 18188, 18189, ...), space-separated for the scripts."""
+    return " ".join(f"http://127.0.0.1:{18188 + i}" for i in range(max(1, state.gpus)))
 PY = f"{REMOTE}/py"  # wrapper written by tracktake_runtime.sh: the ComfyUI venv interpreter
 FORMAT_OF = {"landscape": "16x9", "portrait": "9x16"}
 ORIENTS = ("landscape", "portrait")
@@ -54,9 +59,10 @@ def plan(shots: list[dict], workers: list[State], orients: tuple[str, ...] = ORI
     out: list[Assignment] = []
     for orient, group in groups:
         load = {w.name: 0.0 for w in group}
+        gpus = {w.name: max(1, w.gpus) for w in group}
         slices: dict[str, list[str]] = {w.name: [] for w in group}
         for s in sorted(shots, key=lambda s: s["end"] - s["start"], reverse=True):
-            name = min(load, key=load.get)
+            name = min(load, key=lambda n: load[n] / gpus[n])  # a host with 8 GPUs takes 8x the work
             slices[name].append(s["id"])
             load[name] += s["end"] - s["start"]
         order = [s["id"] for s in shots]
@@ -148,10 +154,10 @@ def prepare(state: State, s: VastSettings, full: Path, kind: str, song: Path, an
 def shard_command(a: Assignment, kind: str) -> str:
     shots = ",".join(a.shots)
     orient = f" --orient {a.orients[0]}" if len(a.orients) == 1 else ""
-    clips = f"{PY} scripts/full_clips.py {FULL} {kind} {LOCAL_COMFY} --shots {shots}{orient}"
+    clips = f"{PY} scripts/full_clips.py {FULL} {kind} {comfy_urls(a.worker)} --shots {shots}{orient}"
     if kind != "comfy":
         return clips
-    keys = f"{PY} scripts/full_keys_comfy.py {FULL} {LOCAL_COMFY} --shots {shots}{orient}"
+    keys = f"{PY} scripts/full_keys_comfy.py {FULL} {comfy_urls(a.worker)} --shots {shots}{orient}"
     return f"{keys} && {clips}"
 
 
@@ -211,15 +217,21 @@ def gather(leader: State, followers: list[State], s: VastSettings, kind: str, lo
         log(f"gathered {f.name} -> {leader.name} in {time.monotonic() - t0:.0f}s")
 
 
-def render(leaders: list[Assignment], s: VastSettings, kind: str, song: Path, analysis: Path, log: Log,
-           poll: float = 20) -> None:
+def start_render(leaders: list[Assignment], s: VastSettings, kind: str, song: Path, analysis: Path,
+                 options: str = "") -> dict[str, int]:
     pids = {}
     for a in leaders:
         fmt = "" if a.leader_of == "both" else f" --format {FORMAT_OF[a.leader_of]}"
         pids[a.worker.name] = start(a.worker, s, f"render_{kind}",
                                     f"{PY} scripts/full_render.py {FULL} {PROJECT}/{analysis.name} "
-                                    f"{PROJECT}/{song.name} {kind}{fmt}")
+                                    f"{PROJECT}/{song.name} {kind}{fmt}{options}")
+    return pids
+
+
+def wait_render(leaders: list[Assignment], pids: dict[str, int], s: VastSettings, kind: str, log: Log,
+                poll: float = 20) -> None:
     started = time.monotonic()
+    pids = dict(pids)
     while pids:
         time.sleep(poll)
         for a in leaders:
@@ -229,7 +241,12 @@ def render(leaders: list[Assignment], s: VastSettings, kind: str, song: Path, an
                 tail = ssh(a.worker, s, f"tail -3 {REMOTE}/logs/render_{kind}.log", check=False)
                 if "Traceback" in tail or "Error" in tail:
                     raise RuntimeError(f"{name}: render failed: {tail[-500:]}")
-                log(f"{name}: render {a.leader_of} done in {time.monotonic() - started:.0f}s")
+                log(f"{name}: render {a.leader_of} done ({time.monotonic() - started:.0f}s after the clips)")
+
+
+def render(leaders: list[Assignment], s: VastSettings, kind: str, song: Path, analysis: Path, log: Log,
+           options: str = "", poll: float = 20) -> None:
+    wait_render(leaders, start_render(leaders, s, kind, song, analysis, options), s, kind, log, poll)
 
 
 def fetch(leaders: list[Assignment], s: VastSettings, kind: str, local: Path, masters: bool, log: Log) -> None:
@@ -246,7 +263,7 @@ def fetch(leaders: list[Assignment], s: VastSettings, kind: str, local: Path, ma
 
 def run_job(workers: list[State], s: VastSettings, full: Path, kind: str, song: Path, analysis: Path,
             masters: bool = True, log: Log = print, release: Callable[[State], None] | None = None,
-            orients: tuple[str, ...] = ORIENTS) -> dict:
+            orients: tuple[str, ...] = ORIENTS, captions: bool = True, beat_motion: bool = True) -> dict:
     """The whole remote job. Returns timings; raises on failure (the caller decides about destroying workers)."""
     sb = json.loads((full / "storyboard.json").read_text())
     assignments = plan(sb["shots"], workers, orients)
@@ -259,11 +276,15 @@ def run_job(workers: list[State], s: VastSettings, full: Path, kind: str, song: 
     t["prepare"] = time.monotonic() - t0
     log(f"prepared {len(workers)} workers in {t['prepare']:.0f}s")
 
+    leaders = [a for a in assignments if a.leader_of]
+    options = ("" if captions else " --captions off") + ("" if beat_motion else " --beat-motion off")
+    # every leader made all of its format's clips itself: start the render now, each chunk waits for its own clips
+    streaming = all(not a.followers for a in leaders)
+    early = start_render(leaders, s, kind, song, analysis, options + " --wait-clips on") if streaming else {}
     t0 = time.monotonic()
     run_clips(assignments, s, kind, log)
     t["clips"] = time.monotonic() - t0
 
-    leaders = [a for a in assignments if a.leader_of]
     t0 = time.monotonic()
     _parallel([lambda a=a: gather(a.worker, a.followers, s, kind, log) for a in leaders])
     t["gather"] = time.monotonic() - t0
@@ -274,7 +295,10 @@ def run_job(workers: list[State], s: VastSettings, full: Path, kind: str, song: 
                 log(f"released {f.name} (its clips are on {a.worker.name})")
 
     t0 = time.monotonic()
-    render(leaders, s, kind, song, analysis, log)
+    if streaming:
+        wait_render(leaders, early, s, kind, log)
+    else:
+        render(leaders, s, kind, song, analysis, log, options=options)
     t["render"] = time.monotonic() - t0
 
     t0 = time.monotonic()

@@ -11,11 +11,12 @@ interface DialogProps {
   className?: string;
   /** Bare dialog without frame (lightbox). */
   bare?: boolean;
+  wide?: boolean;
   labelledBy?: string;
 }
 
 /** Native <dialog> wrapper: focus trap, Esc and backdrop close come for free. */
-export function Dialog({ open, onClose, title, children, footer, className, bare = false }: DialogProps) {
+export function Dialog({ open, onClose, title, children, footer, className, bare = false, wide = false }: DialogProps) {
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const onCloseRef = useRef(onClose);
@@ -51,7 +52,7 @@ export function Dialog({ open, onClose, title, children, footer, className, bare
         (bare ? (
           children
         ) : (
-          <div className="panel w-[min(560px,94vw)] shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)]">
+          <div className={cx("panel shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)]", wide ? "w-[min(760px,94vw)]" : "w-[min(560px,94vw)]")}>
             {title && (
               <div className="flex items-center justify-between gap-4 border-b border-ink-700 px-6 py-4">
                 <h2 className="font-display text-[1.7rem] leading-tight">{title}</h2>
@@ -65,7 +66,7 @@ export function Dialog({ open, onClose, title, children, footer, className, bare
                 </button>
               </div>
             )}
-            <div className="px-6 py-5">{children}</div>
+            <div className="max-h-[72vh] overflow-y-auto px-6 py-5">{children}</div>
             {footer && <div className="flex justify-end gap-2 border-t border-ink-700 px-6 py-4">{footer}</div>}
           </div>
         ))}

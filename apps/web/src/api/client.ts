@@ -8,6 +8,10 @@ import type {
   Project,
   ProjectSettings,
   Storyboard,
+  VastGpus,
+  AutopilotPayload,
+  RenderPresets,
+  Setup,
   VastStatus,
   Videos,
 } from "./types";
@@ -56,6 +60,13 @@ const json = (method: string, body?: unknown): RequestInit => ({
 
 const p = (id: string) => `/api/projects/${encodeURIComponent(id)}`;
 
+/** Preview a GPU choice in the estimate before/without saving it. */
+export interface EstimateChoice {
+  gpu?: string;
+  gpus?: number;
+  max_dph?: number;
+}
+
 export interface InputsPayload {
   song?: File;
   cover?: File;
@@ -78,6 +89,7 @@ export interface RenderPayload {
   set: KeySet;
   workers: number;
   gpu?: string;
+  gpus?: number;
   max_dph?: number;
   masters?: boolean;
   confirm: true;
@@ -90,7 +102,7 @@ export const api = {
     request<Project>("/api/projects", json("POST", payload)),
   patchProject: (
     id: string,
-    patch: Partial<{ name: string; style: string; language: string; settings: ProjectSettings; orientation: Orientation }>,
+    patch: Partial<{ name: string; style: string; language: string; settings: Partial<ProjectSettings>; orientation: Orientation }>,
   ) => request<Project>(p(id), json("PATCH", patch)),
   deleteProject: (id: string) => request<{ ok: true }>(p(id), { method: "DELETE" }),
   uploadInputs: (id: string, payload: InputsPayload) => {
@@ -110,6 +122,7 @@ export const api = {
   storyboard: (id: string) => request<Storyboard>(`${p(id)}/storyboard`),
   saveStoryboard: (id: string, doc: Storyboard) =>
     request<Storyboard>(`${p(id)}/storyboard`, json("PUT", doc)),
+  checkStoryboard: (id: string) => request<Job>(`${p(id)}/storyboard/check`, { method: "POST" }),
   planStoryboard: (id: string) =>
     request<Storyboard>(`${p(id)}/storyboard/plan`, { method: "POST" }),
   writeStoryboard: (id: string, payload: WritePayload) =>
@@ -122,13 +135,25 @@ export const api = {
     request<Job>(`${p(id)}/keys/codex`, json("POST", payload)),
 
   videos: (id: string) => request<Videos>(`${p(id)}/videos`),
-  estimate: (id: string, set: KeySet, workers: number) =>
-    request<Estimate>(`${p(id)}/estimate?set=${set}&workers=${workers}`),
+  estimate: (id: string, set: KeySet, workers: number, choice: EstimateChoice = {}) => {
+    const q = new URLSearchParams({ set, workers: String(workers) });
+    if (choice.gpu) q.set("gpu", choice.gpu);
+    if (choice.gpus) q.set("gpus", String(choice.gpus));
+    if (choice.max_dph && Number.isFinite(choice.max_dph)) q.set("max_dph", String(choice.max_dph));
+    return request<Estimate>(`${p(id)}/estimate?${q.toString()}`);
+  },
   render: (id: string, payload: RenderPayload) =>
     request<Job>(`${p(id)}/render`, json("POST", payload)),
 
   vast: () => request<VastStatus>("/api/vast"),
+  autopilot: (id: string, payload: AutopilotPayload) => request<Job>(`${p(id)}/autopilot`, json("POST", payload)),
+  renderPresets: (id: string) => request<RenderPresets>(`${p(id)}/render-presets`),
+  setup: () => request<Setup>("/api/setup"),
+  setupSshKey: () => request<Setup>("/api/setup/ssh-key", { method: "POST" }),
+  vastGpus: () => request<VastGpus>("/api/vast/gpus"),
   vastKey: (key: string) => request<VastStatus>("/api/vast/key", json("POST", { key })),
+  vastRelease: (id: number, force = false) =>
+    request<{ freed: number; usd: number }>(`/api/vast/instances/${id}/down?force=${force}`, { method: "POST" }),
   vastDown: () => request<{ freed: number; usd: number }>("/api/vast/down", { method: "POST" }),
 
   jobs: (project?: string) =>
@@ -148,8 +173,11 @@ export const qk = {
   storyboard: (id: string) => ["project", id, "storyboard"] as const,
   keys: (id: string) => ["project", id, "keys"] as const,
   videos: (id: string) => ["project", id, "videos"] as const,
-  estimate: (id: string, set: KeySet, workers: number) =>
-    ["project", id, "estimate", set, workers] as const,
+  estimate: (id: string, set: KeySet, workers: number, choice: EstimateChoice = {}) =>
+    ["project", id, "estimate", set, workers, choice.gpu ?? null, choice.gpus ?? null, choice.max_dph ?? null] as const,
+  vastGpus: ["vast", "gpus"] as const,
+  renderPresets: (id: string) => ["project", id, "render-presets"] as const,
+  setup: ["setup"] as const,
   jobs: (id: string) => ["jobs", id] as const,
   vast: ["vast"] as const,
 };

@@ -25,6 +25,8 @@ interface TimelineProps {
   selected: ReadonlySet<string>;
   primary: string | null;
   onPick: (id: string, additive: boolean) => void;
+  /** location id -> name, shown in the shot tooltip */
+  locationNames?: Record<string, string>;
   thumbs: Record<string, string | null>;
   transport: Transport;
 }
@@ -32,7 +34,7 @@ interface TimelineProps {
 const indexAt = <T extends { start: number; end: number }>(items: T[], t: number) =>
   items.findIndex((x) => t >= x.start && t < x.end);
 
-export function Timeline({ duration, peaks, analysis, shots, selected, primary, onPick, thumbs, transport }: TimelineProps) {
+export function Timeline({ duration, peaks, analysis, shots, selected, primary, onPick, thumbs, locationNames, transport }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const t = useT();
   const inner = useRef<HTMLDivElement>(null);
@@ -229,7 +231,7 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
               <SectionsLane sections={analysis?.sections ?? []} pps={pps} />
             </div>
             <div className="border-t border-ink-800" onClick={(e) => transport.seek(timeAt(e.clientX))}>
-              <ShotsLane shots={shots} pps={pps} selected={selected} primary={primary} current={curShot} thumbs={thumbs} onPick={onPick} />
+              <ShotsLane shots={shots} pps={pps} selected={selected} primary={primary} current={curShot} thumbs={thumbs} locationNames={locationNames} onPick={onPick} />
             </div>
             <div className="border-t border-ink-800" onClick={(e) => transport.seek(timeAt(e.clientX))}>
               <LyricsLane lines={lines ?? []} pps={pps} current={curLine} onSeek={transport.seek} />

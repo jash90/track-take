@@ -1,10 +1,13 @@
 import { createContext, useContext } from "react";
 import type { Job, Project } from "../../api/types";
+import type { MakeVideoInitial } from "../autopilot/MakeVideoDialog";
 
 export interface WorkspaceValue {
   project: Project;
   jobs: Job[];
   openJobs: () => void;
+  /** Opens the "Make the video" dialog (autopilot). */
+  openMakeVideo: (initial?: MakeVideoInitial) => void;
 }
 
 export const WorkspaceCtx = createContext<WorkspaceValue | null>(null);

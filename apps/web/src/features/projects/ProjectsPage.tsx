@@ -3,6 +3,7 @@ import { ErrorBox } from "../../components/ui";
 import { NewProjectTile } from "./NewProjectTile";
 import { ProjectCard } from "./ProjectCard";
 import { useT } from "../../i18n";
+import { SongDropzone } from "./SongDropzone";
 
 export function ProjectsPage() {
   const { data, isPending, isError, error, refetch } = useProjects();
@@ -22,6 +23,8 @@ export function ProjectsPage() {
           </p>
         </div>
       </header>
+
+      <SongDropzone />
 
       {isError && <ErrorBox title={t("projects.loadError")} error={error} onRetry={() => void refetch()} />}
 

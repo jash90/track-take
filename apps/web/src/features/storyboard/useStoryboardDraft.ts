@@ -25,7 +25,7 @@ export function useStoryboardDraft(server: Storyboard | undefined) {
     setStale(false);
   }, []);
 
-  const update = useCallback((patch: Partial<Pick<Storyboard, "style" | "heroine">>) => {
+  const update = useCallback((patch: Partial<Pick<Storyboard, "style" | "heroine" | "locations" | "props">>) => {
     setDraft((d) => (d ? { ...d, ...patch } : d));
   }, []);
 

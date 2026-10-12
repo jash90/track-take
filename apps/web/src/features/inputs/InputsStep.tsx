@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { api, qk } from "../../api/client";
@@ -8,6 +8,8 @@ import { Dropzone } from "../../components/Dropzone";
 import { useToast } from "../../components/Toaster";
 import { Button, Hint, InlineError, ProgressBar, StepHeader } from "../../components/ui";
 import { useObjectUrl } from "../../lib/useObjectUrl";
+import { useDebounced } from "../../lib/useDebounced";
+import { errorMessage } from "../../lib/format";
 import { activeJob, useWorkspace } from "../workspace/context";
 import { AnalysisSummary } from "./AnalysisSummary";
 import { OrientationField } from "./OrientationField";
@@ -20,7 +22,7 @@ const LANGS: { value: string; label: Key }[] = [
 ];
 
 export function InputsStep() {
-  const { project, jobs, openJobs } = useWorkspace();
+  const { project, jobs, openJobs, openMakeVideo } = useWorkspace();
   const qc = useQueryClient();
   const toast = useToast();
   const t = useT();
@@ -47,40 +49,78 @@ export function InputsStep() {
   const shownSong = songUrl ?? withBust(project.inputs.song);
 
   const serverLyrics = lyricsQ.data?.text ?? "";
-  const lyricsDirty = lyrics !== null && lyrics !== serverLyrics;
-  const metaDirty = name !== project.name || style !== project.style || language !== project.language;
-  const dirty = metaDirty || lyricsDirty || !!song || !!cover;
 
-  const save = useMutation({
-    mutationFn: async () => {
-      let p: Project = project;
-      if (metaDirty) p = await api.patchProject(project.id, { name: name.trim() || project.name, style, language });
-      if (song || cover || lyricsDirty) {
-        p = await api.uploadInputs(project.id, {
-          song: song ?? undefined,
-          cover: cover ?? undefined,
-          lyrics: lyricsDirty ? (lyrics ?? "") : undefined,
-        });
-      }
-      return p;
-    },
+  // files upload right away
+  const upload = useMutation({
+    mutationFn: (payload: { song?: File; cover?: File }) => api.uploadInputs(project.id, payload),
     onSuccess: (p) => {
       qc.setQueryData(qk.project(project.id), p);
       void qc.invalidateQueries({ queryKey: qk.projects });
-      if (lyricsDirty) void qc.invalidateQueries({ queryKey: qk.lyrics(project.id) });
+      void qc.invalidateQueries({ queryKey: qk.renderPresets(project.id) });
       setSong(null);
       setCover(null);
       setBust(Date.now());
       toast(t("inputs.savedToast"), "ok");
     },
+    onError: () => {
+      setSong(null);
+      setCover(null);
+    },
   });
+  const pickSong = (f: File) => {
+    setSong(f);
+    upload.mutate({ song: f });
+  };
+  const pickCover = (f: File) => {
+    setCover(f);
+    upload.mutate({ cover: f });
+  };
+
+  // text fields autosave ~800 ms after the last keystroke
+  const fields = useMemo(() => ({ name, style, language, lyrics }), [name, style, language, lyrics]);
+  const draft = useDebounced(fields, 800);
+  const [tick, setTick] = useState(0);
+  // autosave only after the user actually edits something (never on mere page load)
+  const [touched, setTouched] = useState(false);
+  const edit = <T,>(set: (v: T) => void, v: T) => {
+    setTouched(true);
+    set(v);
+  };
+  const autosave = useMutation({
+    mutationFn: async (d: typeof draft) => {
+      let p: Project | null = null;
+      const meta = d.name.trim() !== project.name || d.style !== project.style || d.language !== project.language;
+      if (meta) p = await api.patchProject(project.id, { name: d.name.trim() || project.name, style: d.style, language: d.language });
+      if (d.lyrics !== null && d.lyrics !== serverLyrics) {
+        p = await api.uploadInputs(project.id, { lyrics: d.lyrics });
+        qc.setQueryData(qk.lyrics(project.id), { text: d.lyrics });
+      }
+      return p;
+    },
+    onSuccess: (p) => {
+      setTick((n) => n + 1); // re-check for edits typed while saving
+      if (!p) return;
+      qc.setQueryData(qk.project(project.id), p);
+      void qc.invalidateQueries({ queryKey: qk.projects });
+    },
+    onError: (err) => toast(t("inputs.autosaveError", { error: errorMessage(err) }), "err"),
+  });
+  useEffect(() => {
+    const metaChanged = (draft.name.trim() && draft.name.trim() !== project.name) || draft.style !== project.style || draft.language !== project.language;
+    const lyricsChanged = draft.lyrics !== null && !lyricsQ.isPending && draft.lyrics !== serverLyrics;
+    if (touched && (metaChanged || lyricsChanged) && !autosave.isPending) autosave.mutate(draft);
+  }, [draft, tick]);
+  const pendingEdits =
+    touched &&
+    (name.trim() !== project.name || style !== project.style || language !== project.language || (lyrics !== null && lyrics !== serverLyrics));
 
   const analyze = useStartJob(project.id, () => api.analyze(project.id), () => {
     toast(t("inputs.analysisStarted"), "info");
     openJobs();
   });
   const running = activeJob(jobs, "analyze");
-  const canAnalyze = !!project.inputs.song && !dirty;
+  const hasSong = !!project.inputs.song;
+  const pilotBusy = !!activeJob(jobs, "autopilot");
 
   return (
     <div className="mx-auto max-w-[1180px]">
@@ -89,24 +129,33 @@ export function InputsStep() {
         title={t("step.inputs")}
         actions={
           <>
-            <Button variant="secondary" busy={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
-              {dirty ? t("inputs.saveChanges") : t("common.saved")}
+            <span className="font-mono text-[0.7rem] text-ink-500" aria-live="polite">
+              {autosave.isPending || upload.isPending || pendingEdits ? t("inputs.autosaving") : t("inputs.autosaved")}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              busy={analyze.isPending || !!running}
+              disabled={!hasSong}
+              title={!hasSong ? t("inputs.uploadSongFirst") : undefined}
+              onClick={() => analyze.mutate(undefined)}
+            >
+              {t("inputs.analysisOnly")}
             </Button>
             <Button
               variant="primary"
-              busy={analyze.isPending || !!running}
-              disabled={!canAnalyze}
-              title={!project.inputs.song ? t("inputs.uploadSongFirst") : dirty ? t("inputs.saveFirst") : undefined}
-              onClick={() => analyze.mutate(undefined)}
+              disabled={!hasSong || pilotBusy}
+              title={!hasSong ? t("inputs.uploadSongFirst") : undefined}
+              onClick={() => openMakeVideo()}
             >
-              {project.stage.analysis ? t("inputs.reanalyze") : t("inputs.analyze")}
+              {t("inputs.make")}
             </Button>
           </>
         }
       >
         {t("inputs.lead")}
       </StepHeader>
-      <InlineError error={save.error ?? analyze.error} />
+      <InlineError error={upload.error ?? analyze.error} />
 
       {running && (
         <div className="mb-6 rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-4">
@@ -126,7 +175,7 @@ export function InputsStep() {
             label={project.inputs.cover ? t("inputs.changeCover") : t("inputs.pickCover")}
             hint={t("inputs.coverHint")}
             file={cover}
-            onFile={setCover}
+            onFile={pickCover}
           >
             <div className="relative aspect-square bg-ink-950">
               {shownCover ? (
@@ -142,7 +191,7 @@ export function InputsStep() {
             label={project.inputs.song ? t("inputs.changeSong") : t("inputs.pickSong")}
             hint={t("inputs.songHint")}
             file={song}
-            onFile={setSong}
+            onFile={pickSong}
           >
             <div className="px-4 pt-4">
               {shownSong ? (
@@ -159,11 +208,11 @@ export function InputsStep() {
           <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_200px]">
             <div>
               <label className="label" htmlFor="in-name">{t("inputs.name")}</label>
-              <input id="in-name" className="field" value={name} onChange={(e) => setName(e.target.value)} />
+              <input id="in-name" className="field" value={name} onChange={(e) => edit(setName, e.target.value)} />
             </div>
             <div>
               <label className="label" htmlFor="in-lang">{t("inputs.lyricsLang")}</label>
-              <select id="in-lang" className="field" value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <select id="in-lang" className="field" value={language} onChange={(e) => edit(setLanguage, e.target.value)}>
                 {LANGS.map((l) => (
                   <option key={l.value} value={l.value}>{t(l.label)}</option>
                 ))}
@@ -179,7 +228,7 @@ export function InputsStep() {
               className="field resize-y leading-relaxed"
               placeholder={t("inputs.stylePlaceholder")}
               value={style}
-              onChange={(e) => setStyle(e.target.value)}
+              onChange={(e) => edit(setStyle, e.target.value)}
             />
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
@@ -190,7 +239,7 @@ export function InputsStep() {
               className="field min-h-[280px] flex-1 resize-y font-mono text-[0.82rem] leading-relaxed"
               placeholder={lyricsQ.isPending && project.inputs.lyrics ? t("inputs.lyricsLoading") : t("inputs.lyricsPlaceholder")}
               value={lyrics ?? ""}
-              onChange={(e) => setLyrics(e.target.value)}
+              onChange={(e) => edit(setLyrics, e.target.value)}
             />
             <InlineError error={lyricsQ.error} />
           </div>
@@ -207,7 +256,7 @@ export function InputsStep() {
           </>
         ) : (
           <Hint>
-            <Trans k="inputs.hint" values={{ analyze: <b>{t("inputs.analyze")}</b>, jobs: <b>{t("jobs.title")}</b> }} />
+            <Trans k="inputs.hint" values={{ make: <b>{t("inputs.make")}</b>, jobs: <b>{t("jobs.title")}</b> }} />
           </Hint>
         )}
       </div>

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
@@ -16,14 +18,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from tracktake import keyframes, project, storyboard
+from tracktake import autopilot, keyframes, project, setup_check, steps
 from tracktake.config import REPO_ROOT
-from tracktake.jobs import Conflict, Context, JobManager, clip_progress
+from tracktake.jobs import Conflict, JobManager
 from tracktake.models import Analysis
 from tracktake.project import FORMATS, KEY_SETS, Project
 
 ENGINE = REPO_ROOT / "engine"
 WEB_DIST = REPO_ROOT / "apps" / "web" / "dist"
+log = logging.getLogger("tracktake.server")
+
 app = FastAPI(title="tracktake")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
@@ -64,7 +68,8 @@ def project_json(p: Project) -> dict:
                   "storyboard_written": sum(1 for s in shots if s.get("scene")), "shots": len(shots),
                   "character_sheet": p.url(p.character_sheet) if p.character_sheet.exists() else None,
                   "keys": keys, "videos": videos},
-        "settings": {"workers": m.settings.workers, "gpu": m.settings.gpu, "max_dph": m.settings.max_dph},
+        "settings": asdict(m.settings),
+        "storyboard_approved": m.storyboard_approved, "autopilot": m.autopilot,
     }
 
 
@@ -137,19 +142,9 @@ def get_lyrics(pid: str) -> dict:
 @app.post("/api/projects/{pid}/analyze")
 def analyze(pid: str) -> dict:
     p = project.get(pid)
-    song = p.input_file("song")
-    if not song:
+    if not p.input_file("song"):
         raise ValueError("upload a song first")
-    lang = p.meta().language
-
-    def run(ctx: Context) -> None:
-        cmd = [sys.executable, "-m", "tracktake.cli", "analyze", song, "--out", p.root, "--language", lang]
-        if p.lyrics().strip():
-            cmd[5:5] = ["--lyrics", p.lyrics_path]
-        ctx.run(cmd, cwd=ENGINE)
-        (p.root / "peaks.json").unlink(missing_ok=True)
-
-    return jobs.submit("analyze", pid, "Song analysis", run).to_dict()
+    return jobs.view(jobs.submit("analyze", pid, "Song analysis", "tracktake.steps:run_analyze"))
 
 
 @app.get("/api/projects/{pid}/analysis")
@@ -214,10 +209,7 @@ def put_storyboard(pid: str, body: dict) -> dict:
 
 @app.post("/api/projects/{pid}/storyboard/plan")
 def plan_storyboard(pid: str) -> dict:
-    p = project.get(pid)
-    sb = storyboard.replan(_analysis(p), p.storyboard(), p.meta().style)
-    p.save_storyboard(sb)
-    return sb
+    return steps.plan(project.get(pid))
 
 
 class WriteBody(BaseModel):
@@ -229,16 +221,20 @@ class WriteBody(BaseModel):
 def write_storyboard(pid: str, body: WriteBody) -> dict:
     p = project.get(pid)
     if not p.storyboard():
-        p.save_storyboard(storyboard.replan(_analysis(p), None, p.meta().style))
+        steps.plan(p)
     n = len(body.shots) if body.shots else len(p.storyboard()["shots"])
+    return jobs.view(jobs.submit("storyboard", pid, f"Director writes the storyboard ({n} shots)",
+                                 "tracktake.steps:run_write", {"shots": body.shots, "instructions": body.instructions},
+                                 {"shots": n}))
 
-    def run(ctx: Context) -> None:
-        sb = storyboard.write(p.storyboard(), body.shots, p.meta().style,
-                              p.cover_ref if p.cover_ref.exists() else None, p.lyrics(), body.instructions, log=ctx.log)
-        p.save_storyboard(sb)
-        ctx.log(f"storyboard saved ({sum(1 for s in sb['shots'] if s.get('scene'))}/{len(sb['shots'])} shots written)")
 
-    return jobs.submit("storyboard", pid, f"Director writes the storyboard ({n} shots)", run, {"shots": n}).to_dict()
+@app.post("/api/projects/{pid}/storyboard/check")
+def check_storyboard(pid: str) -> dict:
+    """Continuity check of the whole storyboard (runs after every director pass too; this re-runs it after edits)."""
+    p = project.get(pid)
+    if not p.storyboard():
+        raise ValueError("no storyboard")
+    return jobs.view(jobs.submit("continuity", pid, "Continuity check", "tracktake.steps:run_continuity"))
 
 
 # ------------------------------------------------------------------------------------------------ keyframes
@@ -254,14 +250,9 @@ class CharacterBody(BaseModel):
 
 @app.post("/api/projects/{pid}/character")
 def make_character(pid: str, body: CharacterBody) -> dict:
-    p = project.get(pid)
-
-    def run(ctx: Context) -> None:
-        ctx.log("Codex is drawing the character sheet")
-        sec = keyframes.character_sheet(p, force=body.force)
-        ctx.log(f"character sheet ready ({sec:.0f}s)" if sec else "character sheet already exists")
-
-    return jobs.submit("character", pid, "Character sheet (Codex)", run).to_dict()
+    project.get(pid)  # 404 for an unknown project before a process is started
+    return jobs.view(jobs.submit("character", pid, "Character sheet (Codex)", "tracktake.steps:run_character",
+                                 {"force": body.force}))
 
 
 class CodexKeysBody(BaseModel):
@@ -273,31 +264,11 @@ class CodexKeysBody(BaseModel):
 @app.post("/api/projects/{pid}/keys/codex")
 def make_codex_keys(pid: str, body: CodexKeysBody) -> dict:
     p = project.get(pid)
-    orients = [p.meta().orientation]
-    planned = keyframes.codex_jobs(p, body.shots, orients, force=False)  # validates the storyboard early
-
-    def run(ctx: Context) -> None:
-        if not p.character_sheet.exists() and any("woman" in s["scene"] for s in p.storyboard()["shots"]):
-            ctx.log("no character sheet yet - drawing it first")
-            keyframes.character_sheet(p)
-        todo = keyframes.codex_jobs(p, body.shots, orients, force=body.force)
-        ctx.progress(0, len(todo))
-        done = 0
-
-        def on_done(job, result) -> None:
-            nonlocal done
-            done += 1
-            ctx.progress(done, len(todo))
-            ctx.log(f"{job.out.name}: {result}")
-
-        keyframes.run_codex(p, todo, max(1, min(body.workers, 8)), on_done, ctx.cancelled)
-        failed = [j.out.name for j in todo if not j.out.exists()]
-        if failed and not ctx.cancelled():
-            raise RuntimeError(f"{len(failed)} keyframes failed: {', '.join(failed[:6])}")
-
+    planned = keyframes.codex_jobs(p, body.shots, [p.meta().orientation], force=False)  # validates the storyboard early
     params = {"shots": len(body.shots)} if body.shots else {"missing": len(planned)}
     label = f"{len(body.shots)} shots" if body.shots else f"{len(planned)} missing"
-    return jobs.submit("keys_codex", pid, f"Codex keyframes ({label})", run, params).to_dict()
+    return jobs.view(jobs.submit("keys_codex", pid, f"Codex keyframes ({label})", "tracktake.steps:run_codex_keys",
+                                 {"shots": body.shots, "force": body.force, "workers": body.workers}, params))
 
 
 # ------------------------------------------------------------------------------------------------ videos / Vast
@@ -318,12 +289,13 @@ def get_videos(pid: str) -> dict:
     return out
 
 
-def _settings_ns(gpu: str | None, max_dph: float | None) -> argparse.Namespace:
-    return argparse.Namespace(gpu=gpu, max_dph=max_dph)
+def _settings_ns(gpu: str | None, max_dph: float | None, gpus: int | None = None) -> argparse.Namespace:
+    return argparse.Namespace(gpu=gpu, max_dph=max_dph, gpus=gpus)
 
 
 @app.get("/api/projects/{pid}/estimate")
-def estimate(pid: str, set: str = "codex", workers: int = 4) -> dict:
+def estimate(pid: str, set: str = "codex", workers: int = 4, gpu: str | None = None, gpus: int | None = None,
+             max_dph: float | None = None) -> dict:
     from tracktake import cli, vast
 
     p = project.get(pid)
@@ -334,10 +306,12 @@ def estimate(pid: str, set: str = "codex", workers: int = 4) -> dict:
     orientation = p.meta().orientation
     clips = len(sb["shots"])
     models = ["wan22_i2v", "zimage"] if set == "comfy" else ["wan22_i2v"]
-    s = cli._remote_settings(_settings_ns(m.gpu, m.max_dph), models)
+    s = cli._remote_settings(_settings_ns(gpu or m.gpu, max_dph or m.max_dph, gpus or m.gpus), models)
+    available = len(vast.search_offers(s, limit=100))  # cached a minute; a render can't get more machines than this
+    workers = min(workers, available) if available else workers
     hours, usd = cli._estimate(s, workers, clips, formats=1)
     alternatives = []
-    for n in sorted({1, 2, 4, workers}):
+    for n in sorted(n for n in {1, 2, 4, workers} if not available or n <= available):
         h, u = (hours, usd) if n == workers else cli._estimate(s, n, clips, formats=1)
         alternatives.append({"workers": n, "minutes": round(h * 60), "usd": round(u, 2)})
     offers = vast.search_offers(s, limit=5)
@@ -345,6 +319,8 @@ def estimate(pid: str, set: str = "codex", workers: int = 4) -> dict:
                                            if not p.key_path("codex", sh["id"], orientation).exists())
     return {"set": set, "workers": workers, "clips": clips, "minutes": round(hours * 60), "usd": round(usd, 2),
             "models_gb": round(s.download_gb), "missing_keys": missing, "alternatives": alternatives,
+            "gpu": s.gpu, "gpus": s.gpus, "speed": cli.gpu_speed(s.gpu), "speed_measured": s.gpu in cli.GPU_SPEED,
+            "no_offers": not offers, "max_dph": s.max_dph, "available_machines": available,
             "offers": [{"id": o.id, "gpu": o.gpu, "dph": round(o.dph, 3), "download_usd": round(o.setup_cost(s.download_gb), 2),
                         "inet_down": round(o.inet_down), "location": o.location} for o in offers]}
 
@@ -353,6 +329,7 @@ class RenderBody(BaseModel):
     set: str
     workers: int = 4
     gpu: str | None = None
+    gpus: int | None = None
     max_dph: float | None = None
     masters: bool = True
     confirm: bool = False
@@ -365,22 +342,66 @@ def render(pid: str, body: RenderBody) -> dict:
         raise ValueError("rendering on Vast costs money: send confirm=true")
     if body.set not in KEY_SETS:
         raise ValueError("set must be codex or comfy")
-    song = p.input_file("song")
-    if not (song and p.analysis_path.exists() and p.storyboard()):
-        raise ValueError("song, analysis and storyboard are required")
     m = p.meta().settings
-    cmd = [sys.executable, "-m", "tracktake.cli", "remote", "run", "--full", p.full, "--set", body.set, "--song", song,
-           "--analysis", p.analysis_path, "--workers", str(max(1, min(body.workers, 8))), "--gpu", body.gpu or m.gpu,
-           "--max-dph", str(body.max_dph or m.max_dph), "--orient", p.meta().orientation, "--yes"]
-    if not body.masters:
-        cmd.append("--no-masters")
-
-    def run(ctx: Context) -> None:
-        ctx.run(cmd, cwd=ENGINE, parse=clip_progress(ctx))
-
+    args = {"kind": body.set, "workers": body.workers, "gpu": body.gpu or m.gpu, "gpus": body.gpus or m.gpus,
+            "max_dph": body.max_dph or m.max_dph, "masters": body.masters, "run_id": steps.new_run_id()}
+    steps.render_command(p, **args)  # validates the project before a process is started
     name = "Codex" if body.set == "codex" else "ComfyUI"
-    return jobs.submit("render", pid, f"Vast render ({name}, {body.workers} cards)", run,
-                       {"set": body.set, "workers": body.workers}).to_dict()
+    return jobs.view(jobs.submit("render", pid, f"Vast render ({name}, {body.workers} cards)",
+                                 "tracktake.steps:job_render", args,
+                                 {"set": body.set, "workers": body.workers, "run_id": args["run_id"]}))
+
+
+# ------------------------------------------------------------------------------------------------ autopilot & setup
+
+class AutopilotBody(BaseModel):
+    budget_usd: float = 1.0
+    preset: str = "recommended"  # cheapest | recommended | fastest | custom (the project's saved card settings)
+    review: bool = True  # stop after the director so the storyboard can be checked
+    approve: bool = False  # the storyboard has been reviewed: continue past it
+
+
+@app.post("/api/projects/{pid}/autopilot")
+def start_autopilot(pid: str, body: AutopilotBody) -> dict:
+    """Make the video: run every missing step (analysis -> storyboard -> keyframes -> render within the budget)."""
+    p = project.get(pid)
+    if not p.input_file("song"):
+        raise ValueError("upload a song first")
+    if body.preset not in ("cheapest", "recommended", "fastest", "custom"):
+        raise ValueError("preset must be cheapest, recommended, fastest or custom (the project's own settings)")
+    if body.approve:
+        p.update(storyboard_approved=True)
+    return jobs.view(jobs.submit("autopilot", pid, "Make the video", "tracktake.autopilot:run",
+                                 {"budget_usd": body.budget_usd, "preset": body.preset, "review": body.review},
+                                 {"budget_usd": body.budget_usd, "preset": body.preset}))
+
+
+@app.get("/api/projects/{pid}/render-presets")
+def render_presets(pid: str) -> dict:
+    p = project.get(pid)
+    return {"clips": autopilot.clip_count(p), "estimated_clips": not p.storyboard(),
+            "presets": autopilot.render_presets(p)}
+
+
+@app.get("/api/setup")
+def setup_status() -> dict:
+    return setup_check.status()
+
+
+@app.post("/api/setup/ssh-key")
+def setup_ssh_key() -> dict:
+    """Create the SSH key if needed and add it to the Vast account (workers are reached over SSH)."""
+    return setup_check.ensure_ssh_key_on_vast()
+
+
+@app.get("/api/vast/gpus")
+def vast_gpus() -> dict:
+    """GPU models on offer now (cached ~5 min): for the card picker's autocomplete and its price/speed hints."""
+    from tracktake import cli, config
+
+    s = config.load().vast
+    return {"min_vram_gb": 24, "filters": {"min_reliability": s.min_reliability, "max_download_usd_per_gb":
+            s.max_download_cost, "min_inet_down_mbps": s.min_inet_down}, "gpus": cli.gpu_catalog(s)}
 
 
 @app.get("/api/vast")
@@ -397,9 +418,13 @@ def vast_status() -> dict:
         out["balance"] = round(float(user.get("credit", 0) or 0), 2)
         names = {st.instance_id: st.name for st in vast.all_states()}
         for i in json.loads(vast.run_cli(["show", "instances", "--raw"])):
-            out["instances"].append({"id": i["id"], "name": names.get(i["id"], i.get("label") or ""),
+            name = names.get(i["id"], "")
+            job = _job_using(name)
+            out["instances"].append({"id": i["id"], "name": name or i.get("label") or "", "known": bool(name),
                                      "gpu": i.get("gpu_name", ""), "status": i.get("actual_status") or "",
-                                     "dph": round(float(i.get("dph_total") or 0), 3)})
+                                     "dph": round(float(i.get("dph_total") or 0), 3),
+                                     "in_use": job is not None, "job": job.id if job else None,
+                                     "project": job.project if job else None})
     except Exception as e:  # noqa: BLE001 - shown in the UI
         out["error"] = str(e)
     return out
@@ -418,7 +443,42 @@ def set_vast_key(body: VastKey) -> dict:
     key_file = Path.home() / ".config" / "vastai" / "vast_api_key"
     if key_file.exists():
         key_file.chmod(0o600)
+    try:  # workers are reached over SSH: put this machine's key on the account right away
+        setup_check.ensure_ssh_key_on_vast()
+    except Exception as e:  # noqa: BLE001 - the setup checklist shows what is still missing
+        log.warning("could not add the SSH key to Vast: %s", e)
     return vast_status()
+
+
+def _job_using(worker_name: str):
+    """The running render whose Vast worker this is (worker names start with the job's run id), else None.
+    A render started before run ids existed claims every worker this machine knows about, to be safe."""
+    if not worker_name:
+        return None
+    for j in jobs.list():
+        if j.kind in ("render", "autopilot") and j.status in ("queued", "running"):
+            run_id = j.params.get("run_id")
+            if (not run_id and j.kind == "render") or (run_id and worker_name.startswith(f"{run_id}-")):
+                return j
+    return None
+
+
+@app.post("/api/vast/instances/{iid}/down")
+def vast_instance_down(iid: int, force: bool = False) -> dict:
+    """Free one card. A card a running render is using needs force=true (or cancel the render instead)."""
+    from tracktake import vast
+
+    state = next((st for st in vast.all_states() if st.instance_id == iid), None)
+    job = _job_using(state.name) if state else None
+    if job and not force:
+        raise Conflict(f"card {iid} is used by the running render {job.id} ({job.project}); cancel the render "
+                       "or send force=true")
+    if state:
+        usd = vast.destroy(state)
+    else:  # not started from here (or its local state is gone): free it all the same
+        vast.run_cli(["destroy", "instance", str(iid), "-y"])
+        usd = 0.0
+    return {"freed": iid, "usd": round(usd, 2)}
 
 
 @app.post("/api/vast/down")
@@ -434,17 +494,17 @@ def vast_down() -> dict:
 
 @app.get("/api/jobs")
 def list_jobs(project: str | None = None) -> list[dict]:
-    return [j.to_dict() for j in jobs.list(project)]
+    return [jobs.view(j) for j in jobs.list(project)]
 
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str) -> dict:
-    return jobs.jobs[job_id].to_dict()
+    return jobs.view(jobs.get(job_id))
 
 
 @app.post("/api/jobs/{job_id}/cancel")
 def cancel_job(job_id: str) -> dict:
-    return jobs.cancel(job_id).to_dict()
+    return jobs.view(jobs.cancel(job_id))
 
 
 @app.api_route("/files/{pid}/{path:path}", methods=["GET", "HEAD"])

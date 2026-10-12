@@ -9,18 +9,29 @@ import { WorkspaceCtx, useWorkspace, type WorkspaceValue } from "./context";
 import { Stepper } from "./Stepper";
 import { FormatBadge, projectOrientation, renderedSets } from "../../lib/orientation";
 import { useT } from "../../i18n";
+import { AutopilotBanner } from "../autopilot/AutopilotBanner";
+import { MakeVideoDialog, type MakeVideoInitial } from "../autopilot/MakeVideoDialog";
 
 export function WorkspacePage() {
   const { id = "" } = useParams();
   const project = useProject(id);
   const jobsQ = useProjectJobs(id);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [makeVideo, setMakeVideo] = useState<{ open: boolean; initial?: MakeVideoInitial }>({ open: false });
   const t = useT();
   const jobs = useMemo(() => jobsQ.data ?? [], [jobsQ.data]);
   useJobWatcher(id, jobs);
 
   const value = useMemo<WorkspaceValue | null>(
-    () => (project.data ? { project: project.data, jobs, openJobs: () => setDrawerOpen(true) } : null),
+    () =>
+      project.data
+        ? {
+            project: project.data,
+            jobs,
+            openJobs: () => setDrawerOpen(true),
+            openMakeVideo: (initial?: MakeVideoInitial) => setMakeVideo({ open: true, initial }),
+          }
+        : null,
     [project.data, jobs],
   );
 
@@ -53,9 +64,16 @@ export function WorkspacePage() {
           <Stepper project={value.project} jobs={jobs} />
         </aside>
         <section className="min-w-0 flex-1 px-6 pb-28 pt-8 lg:px-10">
+          <AutopilotBanner project={value.project} jobs={jobs} onChangePreset={(initial) => setMakeVideo({ open: true, initial })} />
           <Outlet />
         </section>
       </div>
+      <MakeVideoDialog
+        open={makeVideo.open}
+        initial={makeVideo.initial}
+        project={value.project}
+        onClose={() => setMakeVideo((m) => ({ ...m, open: false }))}
+      />
       <JobsDrawer projectId={id} jobs={jobs} open={drawerOpen} onOpenChange={setDrawerOpen} error={jobsQ.error} />
     </WorkspaceCtx.Provider>
   );

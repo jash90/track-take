@@ -1,4 +1,5 @@
-import type { KeySet, Orientation, Shot, ShotKeys } from "../../api/types";
+import type { KeySet, Orientation, Shot, ShotKeys, WorldItem } from "../../api/types";
+import { ShotWorldFields } from "./ShotWorldFields";
 import { Chip } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { formatTime } from "../../lib/format";
@@ -12,6 +13,7 @@ interface Props {
   total: number;
   keys: Partial<Record<KeySet, ShotKeys | undefined>>;
   orientation: Orientation;
+  world: { locations: WorldItem[]; props: WorldItem[] };
   disabled: boolean;
   onChange: (patch: Partial<Shot>) => void;
   onStep: (delta: number) => void;
@@ -24,7 +26,7 @@ const SETS: { set: KeySet; label: string }[] = [
   { set: "comfy", label: "ComfyUI" },
 ];
 
-export function ShotEditor({ shot, index, total, keys, orientation, disabled, onChange, onStep, onOpenImage, onPlay }: Props) {
+export function ShotEditor({ shot, index, total, keys, orientation, world, disabled, onChange, onStep, onOpenImage, onPlay }: Props) {
   const written = shot.scene.trim().length > 0;
   const t = useT();
   return (
@@ -55,6 +57,7 @@ export function ShotEditor({ shot, index, total, keys, orientation, disabled, on
       </div>
 
       <ContinuityToggle cut={isCut(shot, index)} first={index === 0} disabled={disabled} onChange={(cut) => onChange({ cut })} />
+      <ShotWorldFields shot={shot} locations={world.locations} props={world.props} disabled={disabled} onChange={onChange} />
 
       {shot.lines.length > 0 ? (
         <blockquote className="mt-4 border-l-2 border-safe/60 pl-4 font-display text-[1.2rem] italic leading-snug text-ink-200">

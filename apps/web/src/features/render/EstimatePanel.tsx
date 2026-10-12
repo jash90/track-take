@@ -1,10 +1,11 @@
 import type { Estimate } from "../../api/types";
 import { ErrorBox, Spinner } from "../../components/ui";
 import { formatMinutes, formatUsd } from "../../lib/format";
-import { useT } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { formatSpeed } from "./GpuPicker";
 
 export function EstimatePanel({ estimate, loading, error, ready }: { estimate: Estimate | undefined; loading: boolean; error: unknown; ready: boolean }) {
-  const t = useT();
+  const { t, locale } = useI18n();
   if (!ready) return <p className="py-4 text-sm text-ink-400">{t("est.notReady")}</p>;
   if (error) return <ErrorBox title={t("est.error")} error={error} />;
   if (!estimate) return <div className="flex items-center gap-2 py-6 text-sm text-ink-400"><Spinner small /> {t("est.loading")}</div>;
@@ -13,8 +14,8 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
     <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink-700 bg-ink-700 sm:grid-cols-4">
         {[
-          { k: t("est.cost"), v: formatUsd(e.usd), big: true },
-          { k: t("est.time"), v: formatMinutes(e.minutes) },
+          { k: t("est.cost"), v: e.no_offers ? "—" : formatUsd(e.usd), big: true },
+          { k: t("est.time"), v: e.no_offers ? "—" : formatMinutes(e.minutes) },
           { k: t("est.clips"), v: String(e.clips) },
           { k: t("est.models"), v: `${e.models_gb} GB` },
         ].map((x) => (
@@ -24,7 +25,18 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
           </div>
         ))}
       </dl>
-      {e.alternatives?.length > 1 && (
+      <p className="mt-2 font-mono text-[0.75rem] text-ink-300">
+        {t("est.speed", { gpus: e.gpus ?? 1, gpu: (e.gpu ?? "").replace(/_/g, " "), speed: formatSpeed(e.speed ?? 1, locale) })}
+        <span className={e.speed_measured ? "ml-2 text-ok" : "ml-2 text-ink-500"}>
+          · {e.speed_measured ? t("est.speedMeasured") : t("est.speedEst")}
+        </span>
+      </p>
+      {e.no_offers && (
+        <div role="alert" className="mt-3 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
+          {t("est.noMatch", { gpu: (e.gpu ?? "").replace(/_/g, " "), gpus: e.gpus ?? 1, dph: formatUsd(e.max_dph) })}
+        </div>
+      )}
+      {!e.no_offers && e.alternatives?.length > 1 && (
         <div className="mt-3">
           <div className="label">{t("est.alternatives")}</div>
           <div className="flex flex-wrap gap-2">

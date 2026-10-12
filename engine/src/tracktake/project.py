@@ -33,7 +33,10 @@ IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 class Settings:
     workers: int = 4
     gpu: str = "RTX_4090"
-    max_dph: float = 0.5
+    gpus: int = 1  # GPUs per host (one ComfyUI each, one model download)
+    max_dph: float = 0.5  # USD per hour per GPU
+    captions: bool = True  # karaoke lyrics in the video
+    beat_motion: bool = True  # camera pump on downbeats and shake on snares
 
 
 @dataclass
@@ -45,6 +48,8 @@ class Meta:
     language: str = "en"
     orientation: str = "landscape"  # one per project: landscape = 16:9 video, portrait = 9:16
     settings: Settings = field(default_factory=Settings)
+    storyboard_approved: bool = False  # the autopilot waits for this when review is on
+    autopilot: dict = field(default_factory=dict)  # state of the "make the video" job, see autopilot.py
 
 
 def slug(name: str) -> str:
@@ -114,7 +119,7 @@ class Project:
                 if v not in ORIENTATIONS:
                     raise ValueError(f"orientation must be one of {ORIENTATIONS}")
                 meta.orientation = v
-            elif k in ("name", "style", "language"):
+            elif k in ("name", "style", "language", "storyboard_approved", "autopilot"):
                 setattr(meta, k, v)
         self.save_meta(meta)
         return meta

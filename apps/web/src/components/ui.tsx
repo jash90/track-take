@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { errorMessage } from "../lib/format";
 import { useT } from "../i18n";
+import { Link } from "react-router";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
@@ -182,5 +183,17 @@ export function Hint({ children }: { children: ReactNode }) {
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="rounded border border-ink-600 bg-ink-800 px-1.5 py-px font-mono text-[0.68rem] text-ink-300">{children}</kbd>
+  );
+}
+
+/** "Next →" link to the following workspace step (relative route). */
+export function NextStepLink({ to }: { to: string }) {
+  const t = useT();
+  return (
+    <div className="mt-8 flex justify-end">
+      <Link to={to} className="rounded-md border border-ink-600 px-4 py-2 text-sm text-ink-100 hover:border-ink-400">
+        {t("common.nextStep")}
+      </Link>
+    </div>
   );
 }

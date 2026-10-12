@@ -5,7 +5,7 @@ import type { KeySet, Shot } from "../../api/types";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import { useToast } from "../../components/Toaster";
-import { Button, Chip, Empty, ErrorBox, Hint, InlineError, Loading, ProgressBar, StepHeader } from "../../components/ui";
+import { Button, Chip, Empty, NextStepLink, ErrorBox, Hint, InlineError, Loading, ProgressBar, StepHeader } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { activeJob, useWorkspace } from "../workspace/context";
 import { formatRatio, projectFormat, projectOrientation } from "../../lib/orientation";
@@ -192,6 +192,8 @@ export function KeysStep() {
           </ul>
         )}
       </div>
+
+      {shots.length > 0 && <NextStepLink to="../wideo" />}
 
       <ConfirmDialog
         open={pending !== null}

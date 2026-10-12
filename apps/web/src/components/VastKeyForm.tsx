@@ -15,6 +15,8 @@ export function VastKeyForm({ replacing = false }: { replacing?: boolean }) {
     mutationFn: (k: string) => api.vastKey(k),
     onSuccess: (status) => {
       qc.setQueryData(qk.vast, status);
+      // saving the key also adds the SSH key on the backend — refresh the setup checklist
+      void qc.invalidateQueries({ queryKey: qk.setup });
       setKey("");
       toast(status.error ? t("vastKey.savedWithError", { error: status.error }) : t("vastKey.saved"), status.error ? "err" : "ok");
     },

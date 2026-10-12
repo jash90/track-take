@@ -69,16 +69,21 @@ def replan(a: Analysis, old: dict | None, style: str) -> dict:
             "shots": shots}
 
 
+BIBLE_ITEM = {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"},
+                                               "look": {"type": "string"}}, "required": ["id", "look"]}
 SCHEMA = {
     "type": "object",
     "properties": {
         "heroine": {"type": "string"},
+        "locations": {"type": "array", "items": BIBLE_ITEM},
+        "props": {"type": "array", "items": BIBLE_ITEM},
         "shots": {"type": "array", "items": {
             "type": "object",
-            "properties": {"id": {"type": "string"}, "scene": {"type": "string"}, "motion": {"type": "string"}},
-            "required": ["id", "scene", "motion"]}},
+            "properties": {"id": {"type": "string"}, "scene": {"type": "string"}, "motion": {"type": "string"},
+                           "location": {"type": "string"}, "props": {"type": "array", "items": {"type": "string"}}},
+            "required": ["id", "scene", "motion", "location"]}},
     },
-    "required": ["heroine", "shots"],
+    "required": ["heroine", "locations", "props", "shots"],
 }
 
 RULES = """You are the director of a music video. Write, for each requested shot, two English texts:
@@ -103,7 +108,24 @@ Continuity (most important - the video must not feel like a slideshow of separat
 - Avoid big jumps inside a continuous run (no new location, no time-of-day change, no new costume, no new objects
   appearing from nowhere); save those for CUT shots. Gradual changes (camera travels, light slowly shifts, rain
   starts) are welcome.
-- The last shot before a CUT can end anywhere."""
+- The last shot before a CUT can end anywhere.
+World bible (so the same place and the same objects look identical in every shot, across cuts too):
+- `locations`: every place the video uses, once, with an id (e.g. "bedroom") and a `look` that fixes what an image
+  model could otherwise change: room size and layout, where the window/door are, every piece of furniture with its
+  KIND, SIZE and COLOUR ("a narrow single bed with a grey wool blanket against the left wall", not "a bed"), floor,
+  walls, light sources. Exterior places likewise (street width, house shape, what is across the road).
+- `props`: objects that matter or recur (the coat, the two cups, the phone) with a fixed look and count.
+- Every shot names its `location` id and the `props` ids visible in it; its `scene` must agree with those looks
+  exactly - never resize, recolour, double or swap an object (a single bed stays single; two cups stay two unless the
+  story removes one, and then the scene says so). Story changes of an object (the coat is taken off the hook) are
+  stated explicitly in the scene where they happen and kept afterwards.
+- If a world bible is given below, keep it unchanged and reuse its ids; add entries only for new places or objects."""
+
+
+def bible_text(sb: dict) -> str:
+    rows = [f"- location {e['id']}: {e['look']}" for e in sb.get("locations", [])]
+    rows += [f"- prop {e['id']}: {e['look']}" for e in sb.get("props", [])]
+    return "\n".join(rows)
 
 
 def director_prompt(sb: dict, shot_ids: list[str], song_style: str, cover: Path | None, lyrics: str,
@@ -111,12 +133,15 @@ def director_prompt(sb: dict, shot_ids: list[str], song_style: str, cover: Path 
     shots = [s for s in sb["shots"] if s["id"] in shot_ids]
     lines = [f"{s['id']} {s['start']:.1f}-{s['end']:.1f}s [{s['section']}] "
              f"{'CUT' if is_cut(sb['shots'], i) else 'CONTINUES'} lyrics: {' / '.join(s['lines']) or '(instrumental)'}"
+             + (f" | location: {s['location']}" if s.get("location") else "")
              + (f" | current scene: {s['scene']}" if s.get("scene") else "") for i, s in enumerate(sb["shots"])]
     cover_hint = f"Look at the album cover image at {cover} (use the Read tool) for palette and mood.\n" if cover else ""
     heroine = sb.get("heroine") or "(not defined yet: invent one main character that fits the cover and song, " \
                                    "and describe her look precisely in `heroine`: hair, face, clothes, shoes)"
+    bible = bible_text(sb)
     return (f"{RULES}\n\nVideo style: {song_style or sb.get('style') or DEFAULT_STYLE}\nMain character: {heroine}\n"
             f"{cover_hint}{('Extra instructions from the user: ' + instructions) if instructions else ''}\n\n"
+            + (f"World bible:\n{bible}\n\n" if bible else "") +
             f"Full lyrics:\n{lyrics}\n\nAll shots of the video (for context):\n" + "\n".join(lines)
             + f"\n\nWrite scene and motion for these shots: {', '.join(s['id'] for s in shots)}.")
 
@@ -126,14 +151,21 @@ def write(sb: dict, shot_ids: list[str] | None, song_style: str, cover: Path | N
     """Ask the director for scene+motion of `shot_ids` (all when None); returns the updated storyboard."""
     ids = shot_ids or [s["id"] for s in sb["shots"]]
     prompt = director_prompt(sb, ids, song_style, cover, lyrics, instructions)
-    result = _ask_claude(prompt, cover, timeout, log) if shutil.which("claude") else _ask_codex(prompt, timeout, log)
+    result = ask(prompt, cover, timeout, log)
     by_id = {s["id"]: s for s in result["shots"]}
     missing = [i for i in ids if i not in by_id]
     if missing:
         log(f"director skipped {len(missing)} shots: {', '.join(missing)}")
     for s in sb["shots"]:
         if s["id"] in by_id:
-            s["scene"], s["motion"] = by_id[s["id"]]["scene"].strip(), by_id[s["id"]]["motion"].strip()
+            got = by_id[s["id"]]
+            s["scene"], s["motion"] = got["scene"].strip(), got["motion"].strip()
+            s["location"], s["props"] = got.get("location", ""), list(got.get("props") or [])
+    for kind in ("locations", "props"):  # the bible only grows: existing looks stay fixed
+        known = {e["id"]: e for e in sb.get(kind, [])}
+        for e in result.get(kind) or []:
+            known.setdefault(e["id"], {"id": e["id"], "name": e.get("name", e["id"]), "look": e["look"].strip()})
+        sb[kind] = list(known.values())
     if result.get("heroine") and not sb.get("heroine"):
         sb["heroine"] = result["heroine"].strip()
     if song_style:
@@ -141,11 +173,24 @@ def write(sb: dict, shot_ids: list[str] | None, song_style: str, cover: Path | N
     return sb
 
 
-def _ask_claude(prompt: str, cover: Path | None, timeout: float, log) -> dict:
-    cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(SCHEMA), "--allowedTools", "Read"]
+def ask(prompt: str, cover: Path | None, timeout: float, log, schema: dict | None = None, key: str = "shots",
+        who: str = "director", shape: str = "") -> dict:
+    """Structured answer from the local claude CLI, or codex exec when claude is not installed."""
+    if shutil.which("claude"):
+        return _ask_claude(prompt, cover, timeout, log, schema or SCHEMA, key, who)
+    return _ask_codex(prompt, timeout, log, shape or DIRECTOR_SHAPE, who)
+
+
+DIRECTOR_SHAPE = ('{"heroine": str, "locations": [{"id", "name", "look"}], "props": [{"id", "name", "look"}], '
+                  '"shots": [{"id", "scene", "motion", "location", "props": [ids]}]}')
+
+
+def _ask_claude(prompt: str, cover: Path | None, timeout: float, log, schema: dict = SCHEMA, key: str = "shots",
+                who: str = "director") -> dict:
+    cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema), "--allowedTools", "Read"]
     if cover:
         cmd += ["--add-dir", str(cover.parent.resolve())]
-    log("director: claude -p (structured output)")
+    log(f"{who}: claude -p (structured output)")
     r = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout, check=False)
     if r.returncode != 0:
         raise RuntimeError(f"claude failed ({r.returncode}): {(r.stderr or r.stdout)[-800:]}")
@@ -153,14 +198,14 @@ def _ask_claude(prompt: str, cover: Path | None, timeout: float, log) -> dict:
     data = envelope.get("structured_output") or envelope.get("result")
     if isinstance(data, str):
         data = json.loads(_strip_fences(data))
-    if not isinstance(data, dict) or "shots" not in data:
-        raise RuntimeError(f"director returned no shots: {str(envelope)[:500]}")
+    if not isinstance(data, dict) or key not in data:
+        raise RuntimeError(f"{who} returned no {key}: {str(envelope)[:500]}")
     return data
 
 
-def _ask_codex(prompt: str, timeout: float, log) -> dict:
-    log("director: codex exec (claude CLI not found)")
-    full = prompt + "\n\nAnswer with ONLY a JSON object: {\"heroine\": str, \"shots\": [{\"id\", \"scene\", \"motion\"}]}"
+def _ask_codex(prompt: str, timeout: float, log, shape: str = DIRECTOR_SHAPE, who: str = "director") -> dict:
+    log(f"{who}: codex exec (claude CLI not found)")
+    full = prompt + f"\n\nAnswer with ONLY a JSON object: {shape}"
     r = subprocess.run(["codex", "exec", "--skip-git-repo-check", "-s", "read-only"], input=full, capture_output=True,
                        text=True, timeout=timeout, check=False)
     if r.returncode != 0:

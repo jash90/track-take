@@ -71,6 +71,8 @@ def _vast_settings(args: argparse.Namespace):
         s.gpu = args.gpu
     if getattr(args, "max_dph", None) is not None:
         s.max_dph = args.max_dph
+    if getattr(args, "gpus", None):
+        s.gpus = args.gpus
     return s
 
 
@@ -203,10 +205,41 @@ def _remote_settings(args: argparse.Namespace, models: list[str]):
 
 
 SETUP_H = 0.17  # boot + image + pip + model download per card (measured 9-13 min)
-CLIP_S = 78.0  # Wan 2.2 14B, 81 frames, 832x480 on an RTX 4090 (measured 70-90 s)
-RENDER_H = 0.15  # one format, 4:29 song, on a Vast worker
-# Wan clip speed relative to an RTX 4090. Only the 4090 is measured; the rest are estimates to verify.
-GPU_SPEED = {"RTX_4090": 1.0, "RTX_5090": 1.6, "RTX_PRO_6000_WS": 1.5, "L40S": 0.9, "H100_SXM": 2.0, "H100_NVL": 1.8}
+CLIP_S = 55.0  # Wan 2.2 14B, up to 81 frames, 832x480 on an RTX 4090 (measured: 45 clips in 2454 s, 2026-10-12)
+# one format, 4:29 song: 9 min measured as one process; now chunks render in parallel while the clips are still
+# generating, leaving ~3 min after the last clip (estimate, to verify on the next run)
+RENDER_H = 0.03  # measured: chunks render alongside the clips, 109 s left after the last clip (H100 NVL host)
+# Wan clip speed relative to an RTX 4090.
+# Measured only; other cards are estimated from Vast's DLPerf (vast.gpu_catalog) until measured with bench_vast.py.
+GPU_SPEED = {
+    "RTX_4090": 1.0,  # 45 clips in 2454 s (2026-10-12)
+    "H100_NVL": 1.9,  # 45 clips in 1290 s (2026-10-12)
+}
+
+
+_CATALOG: tuple[float, list[dict]] | None = None
+
+
+def gpu_catalog(s, max_age: float = 300) -> list[dict]:
+    """vast.gpu_catalog, cached for a few minutes (one search is ~2 s)."""
+    global _CATALOG
+    from . import vast
+
+    if _CATALOG is None or time.monotonic() - _CATALOG[0] > max_age:
+        _CATALOG = (time.monotonic(), vast.gpu_catalog(s, GPU_SPEED))
+    return _CATALOG[1]
+
+
+def gpu_speed(gpu: str) -> float:
+    """Wan clip speed relative to an RTX 4090: measured, else estimated from the live catalog, else 1."""
+    if gpu in GPU_SPEED:
+        return GPU_SPEED[gpu]
+    try:
+        from . import config
+
+        return next((g["speed"] for g in gpu_catalog(config.load().vast) if g["gpu"] == gpu and g["speed"]), 1.0)
+    except Exception:  # noqa: BLE001 - no network / no API key: fall back to the 4090 speed
+        return 1.0
 
 
 def _estimate(s, workers: int, clips: int, render: bool = True, extra_minutes: float = 0.0,
@@ -220,7 +253,7 @@ def _estimate(s, workers: int, clips: int, render: bool = True, extra_minutes: f
         return 0.0, 0.0
     dph = sum(o.dph for o in offers) / len(offers)
     dl = sum(o.setup_cost(s.download_gb) for o in offers) / len(offers)
-    work_h = clips * CLIP_S / GPU_SPEED.get(s.gpu, 1.0) / 3600 + extra_minutes / 60
+    work_h = clips * CLIP_S / gpu_speed(s.gpu) / 3600 / max(1, s.gpus) + extra_minutes / 60  # host-hours
     render_wall = RENDER_H * math.ceil(formats / min(workers, formats)) if render else 0.0
     wall = SETUP_H + work_h / workers + render_wall
     usd = workers * (SETUP_H * dph + dl) + work_h * dph + (formats * RENDER_H * dph if render else 0.0)
@@ -255,8 +288,10 @@ def cmd_remote(args: argparse.Namespace) -> int:
         print("not renting: run again with --yes (billing starts immediately; cards are freed at the end)")
         return 1
     workers: list = []
+    # this job's workers only: another job may be renting right now (the UI passes its job's id to tell them apart)
+    run_id = (args.run_id or f"r{int(time.time()) % 1_000_000}").rstrip("-") + "-"
     try:
-        workers = vast.rent_fleet(1 if args.action == "analyze" else args.workers, s)
+        workers = vast.rent_fleet(1 if args.action == "analyze" else args.workers, s, prefix=run_id, tunnel=False)
         if not workers:
             print("no worker came up")
             return 1
@@ -266,15 +301,16 @@ def cmd_remote(args: argparse.Namespace) -> int:
             print(f"wrote {path}")
         else:
             timings = remote.run_job(workers, s, Path(args.full), args.set, Path(args.song), Path(args.analysis),
-                                     masters=not args.no_masters, release=vast.destroy, orients=orients)
+                                     masters=not args.no_masters, release=vast.destroy, orients=orients,
+                                     captions=not args.no_captions, beat_motion=not args.no_beat_motion)
             print(f"DONE {json.dumps(timings)}")
         return 0
     finally:
         if args.keep:
             print("--keep: workers left running; `tracktake vast down --all` stops billing")
         else:
-            total = sum(vast.destroy(st) for st in vast.all_states())
-            print(f"freed all workers (~${total:.2f} by local estimate; see `vastai show invoices` for the bill)")
+            total = sum(vast.destroy(st) for st in vast.all_states() if st.name.startswith(run_id))
+            print(f"freed this job's workers (~${total:.2f} by local estimate; see `vastai show invoices` for the bill)")
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -341,9 +377,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--orient", choices=["landscape", "portrait", "both"], default="both",
                    help="run: which video to make (a project has one orientation)")
     r.add_argument("--gpu", help="override [vast].gpu")
+    r.add_argument("--gpus", type=int, help="GPUs per host (one ComfyUI per GPU, one model download)")
     r.add_argument("--max-dph", type=float, help="override [vast].max_dph")
     r.add_argument("--no-masters", action="store_true", help="run: download only the small previews")
+    r.add_argument("--no-captions", action="store_true", help="run: video without karaoke lyrics")
+    r.add_argument("--no-beat-motion", action="store_true", help="run: no camera pump/shake on the beat")
     r.add_argument("--keep", action="store_true", help="do not free the workers at the end")
+    r.add_argument("--run-id", help="prefix of this job's worker names (default: from the clock)")
     r.add_argument("--yes", action="store_true", help="actually rent (billing starts)")
     r.set_defaults(func=cmd_remote)
 
