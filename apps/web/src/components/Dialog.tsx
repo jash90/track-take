@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { cx } from "../lib/cx";
+import { useT } from "../i18n";
 
 interface DialogProps {
   open: boolean;
@@ -15,6 +16,7 @@ interface DialogProps {
 
 /** Native <dialog> wrapper: focus trap, Esc and backdrop close come for free. */
 export function Dialog({ open, onClose, title, children, footer, className, bare = false }: DialogProps) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -56,7 +58,7 @@ export function Dialog({ open, onClose, title, children, footer, className, bare
                 <button
                   type="button"
                   onClick={onClose}
-                  aria-label="Zamknij"
+                  aria-label={t("common.close")}
                   className="grid h-8 w-8 place-items-center rounded-md text-ink-400 hover:bg-ink-750 hover:text-ink-100"
                 >
                   ✕

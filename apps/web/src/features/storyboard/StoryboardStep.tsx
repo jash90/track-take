@@ -17,6 +17,8 @@ import { ShotEditor } from "./ShotEditor";
 import { Timeline } from "./Timeline";
 import { useAudioTransport } from "./useAudioTransport";
 import { useStoryboardDraft } from "./useStoryboardDraft";
+import { Trans, useT } from "../../i18n";
+import { jobTitle } from "../jobs/jobTitle";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
@@ -27,6 +29,7 @@ export function StoryboardStep() {
   const orientation = projectOrientation(project);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
   const analysis = useAnalysis(id, project.stage.analysis);
   const peaks = usePeaks(id, !!analysis.data);
   const sbQ = useStoryboard(id, project.stage.storyboard);
@@ -111,7 +114,7 @@ export function StoryboardStep() {
   const save = useMutation({
     mutationFn: () => persist(draft),
     onSuccess: () => {
-      toast("Storyboard zapisany", "ok");
+      toast(t("sb.savedToast"), "ok");
       void qc.invalidateQueries({ queryKey: qk.project(id) });
     },
   });
@@ -126,7 +129,7 @@ export function StoryboardStep() {
       qc.setQueryData(qk.storyboard(id), doc);
       void qc.invalidateQueries({ queryKey: qk.project(id) });
       setConfirmPlan(false);
-      toast(`Rozpisano ${doc.shots.length} ujęć`, "ok");
+      toast(t("sb.plannedToast", { count: doc.shots.length }), "ok");
     },
   });
 
@@ -138,7 +141,7 @@ export function StoryboardStep() {
       return api.writeStoryboard(id, { shots: shotsToWrite, instructions: instr });
     },
     () => {
-      toast("Reżyser pisze storyboard…", "info");
+      toast(t("sb.writingToast"), "info");
       openJobs();
     },
   );
@@ -157,12 +160,12 @@ export function StoryboardStep() {
   };
 
   const noAnalysis = !analysis.data && (!project.stage.analysis || isNotFound(analysis.error));
-  if (!noAnalysis && analysis.isPending) return <Loading label="Wczytuję analizę…" />;
+  if (!noAnalysis && analysis.isPending) return <Loading label={t("analysis.loading")} />;
   if (noAnalysis || !analysis.data) {
     if (noAnalysis)
       return (
-        <Empty title="Najpierw przeanalizuj utwór" action={<Link to="../wejscie" className="text-sm text-safe hover:underline">← Wejście</Link>}>
-          Storyboard tnie ujęcia na downbeatach, więc potrzebuje bitów i sekcji z analizy.
+        <Empty title={t("sb.noAnalysis")} action={<Link to="../wejscie" className="text-sm text-safe hover:underline">{t("sb.backToInputs")}</Link>}>
+          {t("sb.noAnalysisBody")}
         </Empty>
       );
     return <ErrorBox error={analysis.error} onRetry={() => void analysis.refetch()} />;
@@ -176,30 +179,29 @@ export function StoryboardStep() {
       <audio ref={transport.audioRef} src={project.inputs.song ?? undefined} preload="auto" />
       <StepHeader
         index="02"
-        title="Storyboard"
+        title={t("step.storyboard")}
         actions={
           <>
-            {dirty && <Button variant="ghost" size="sm" onClick={discard} disabled={busyAny}>Odrzuć zmiany</Button>}
+            {dirty && <Button variant="ghost" size="sm" onClick={discard} disabled={busyAny}>{t("sb.discard")}</Button>}
             <Button variant="secondary" disabled={!dirty || !!writing} busy={save.isPending} onClick={() => save.mutate()}>
-              {dirty ? "Zapisz" : "Zapisano"}
+              {dirty ? t("common.save") : t("common.saved")}
             </Button>
             <Button variant="secondary" busy={plan.isPending} disabled={busyAny || !!writing} onClick={() => setConfirmPlan(true)}>
-              Przelicz ujęcia
+              {t("sb.plan")}
             </Button>
             <Button variant="primary" busy={write.isPending || !!writing} disabled={noStoryboard || busyAny} onClick={() => write.mutate(undefined)}>
-              Napisz storyboard (Claude)
+              {t("sb.write")}
             </Button>
           </>
         }
       >
-        Ujęcia po 2 takty, na downbeatach; twarde cięcia tylko na początkach sekcji, reszta płynie jako jedno ujęcie. Reżyser opisuje
-        scenę i ruch każdego ujęcia
+        {t("sb.lead")}
         {draft && (
           <>
-            {" "}— opisanych <b className="text-ink-200">{written}/{shots.length}</b>.
+            <Trans k="sb.writtenCount" values={{ written: <b className="text-ink-200">{written}/{shots.length}</b> }} />
             <span className="mt-2 flex items-center gap-2 font-mono text-[0.78rem] text-ink-300">
               <span aria-hidden className="grid h-4 w-4 place-items-center rounded-full bg-safe text-[0.6rem] text-ink-950">✂</span>
-              {continuitySummary(shots)}
+              {continuitySummary(shots, t)}
             </span>
           </>
         )}
@@ -209,7 +211,7 @@ export function StoryboardStep() {
       {writing && (
         <div className="mb-4 rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-3">
           <div className="flex items-center justify-between gap-4 text-sm">
-            <span>{writing.title} — edycja zablokowana do końca</span>
+            <span>{t("sb.writingBanner", { title: jobTitle(writing, t) })}</span>
             <span className="truncate font-mono text-[0.75rem] text-ink-400">{writing.message}</span>
           </div>
           {writing.progress && <ProgressBar className="mt-2" value={writing.progress.done} total={writing.progress.total} />}
@@ -217,8 +219,8 @@ export function StoryboardStep() {
       )}
       {stale && (
         <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-warn/40 bg-warn/[0.06] px-4 py-2 text-sm">
-          <span>Na serwerze jest nowsza wersja storyboardu, a Ty masz niezapisane zmiany.</span>
-          <Button size="sm" variant="ghost" onClick={discard}>Wczytaj wersję z serwera</Button>
+          <span>{t("sb.stale")}</span>
+          <Button size="sm" variant="ghost" onClick={discard}>{t("sb.loadServer")}</Button>
         </div>
       )}
 
@@ -233,14 +235,14 @@ export function StoryboardStep() {
         thumbs={thumbs}
         transport={transport}
       />
-      {peaks.isError && <p className="mt-2 text-[0.75rem] text-err">Nie udało się pobrać przebiegu fali: {errorMessage(peaks.error)}</p>}
+      {peaks.isError && <p className="mt-2 text-[0.75rem] text-err">{t("sb.peaksError", { error: errorMessage(peaks.error) })}</p>}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div>
-          {sbQ.isPending && !noStoryboard && <Loading label="Wczytuję storyboard…" />}
+          {sbQ.isPending && !noStoryboard && <Loading label={t("sb.loading")} />}
           {noStoryboard && (
-            <Empty title="Brak storyboardu" action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>Przelicz ujęcia</Button>}>
-              Zacznij od pocięcia utworu na ujęcia — po 2 takty, na downbeatach. Potem reżyser (Claude) opisze każde z nich.
+            <Empty title={t("sb.empty")} action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>{t("sb.plan")}</Button>}>
+              {t("sb.emptyBody")}
             </Empty>
           )}
           {shot && (
@@ -277,15 +279,14 @@ export function StoryboardStep() {
 
       <ConfirmDialog
         open={confirmPlan}
-        title="Przeliczyć ujęcia?"
-        confirmLabel="Przelicz"
+        title={t("sb.planTitle")}
+        confirmLabel={t("sb.planConfirm")}
         busy={plan.isPending}
         onConfirm={() => plan.mutate()}
         onClose={() => setConfirmPlan(false)}
       >
-        Ujęcia zostaną pocięte od nowa na downbeatach (2 takty na ujęcie), a cięcia/przejścia ciągłe ustawione od nowa (cięcie na
-        początku zwrotki, refrenu, bridge’u, breakdownu i outro). Teksty ujęć, które się nie zmienią, zostaną zachowane.
-        {dirty && " Twoje niezapisane zmiany zostaną najpierw zapisane."}
+        {t("sb.planBody")}
+        {dirty && t("sb.planDirty")}
         <InlineError error={plan.error} />
       </ConfirmDialog>
       <Lightbox items={lightbox.items} index={lightbox.index} onIndex={(i) => setLightbox((l) => ({ ...l, index: i }))} />

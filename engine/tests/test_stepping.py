@@ -2,7 +2,7 @@ import itertools
 
 import pytest
 
-from sunomv.render.stepping import active_drawing, drawing_frames, pulse_track
+from tracktake.render.stepping import active_drawing, drawing_frames, pulse_track
 
 
 def test_on_twos_without_forced():

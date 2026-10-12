@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from sunomv.models import Analysis
+from tracktake.models import Analysis
 
 CUT_KINDS = {"verse", "chorus", "bridge", "breakdown", "outro"}
 

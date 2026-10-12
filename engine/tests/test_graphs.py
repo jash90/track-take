@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sunomv.comfy.graphs import ZIMAGE_CUDA, qwen_edit, wan_i2v, zimage
+from tracktake.comfy.graphs import ZIMAGE_CUDA, qwen_edit, wan_i2v, zimage
 
 SCHEMA = json.loads((Path(__file__).parent / "fixtures" / "comfy_nodes_0df64eb.json").read_text())["nodes"]
 

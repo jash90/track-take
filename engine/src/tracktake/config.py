@@ -1,6 +1,6 @@
-"""Settings from config/sunomv.toml, with SUNOMV_* environment overrides.
+"""Settings from config/tracktake.toml, with TRACKTAKE_* environment overrides.
 
-Overrides use SUNOMV_<SECTION>_<KEY>, e.g. SUNOMV_COMFY_BACKEND=vast or SUNOMV_VAST_MAX_DPH=0.8.
+Overrides use TRACKTAKE_<SECTION>_<KEY>, e.g. TRACKTAKE_COMFY_BACKEND=vast or TRACKTAKE_VAST_MAX_DPH=0.8.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from typing import get_origin
 from pydantic import BaseModel
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CONFIG_PATH = REPO_ROOT / "config" / "sunomv.toml"
-STATE_DIR = Path.home() / ".config" / "sunomv"
+CONFIG_PATH = REPO_ROOT / "config" / "tracktake.toml"
+STATE_DIR = Path.home() / ".config" / "tracktake"
 
 
 class ComfySettings(BaseModel):
@@ -65,7 +65,7 @@ def _apply_env(data: dict) -> dict:
     for section, fields in Settings.model_fields.items():
         model = fields.annotation
         for key, field in model.model_fields.items():
-            raw = os.environ.get(f"SUNOMV_{section.upper()}_{key.upper()}")
+            raw = os.environ.get(f"TRACKTAKE_{section.upper()}_{key.upper()}")
             if raw is None:
                 continue
             if get_origin(field.annotation) is list:

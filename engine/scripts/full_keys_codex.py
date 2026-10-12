@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from sunomv.codex_images import ImageJob, generate_all
+from tracktake.codex_images import ImageJob, generate_all
 
 FRAMING = {
     "landscape": "Cinematic horizontal composition; keep the main subject and action inside the central 16:9 area.",

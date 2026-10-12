@@ -1,7 +1,7 @@
 """Command line.
 
-  sunomv analyze <song> --lyrics <txt> --out <work_dir>
-  sunomv vast setup | offers | up [--yes] | status | tunnel | down
+  tracktake analyze <song> --lyrics <txt> --out <work_dir>
+  tracktake vast setup | offers | up [--yes] | status | tunnel | down
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def cmd_vast(args: argparse.Namespace) -> int:
     if args.all and args.action in ("status", "down"):
         states = vast.all_states()
         if not states:
-            print("no sunomv instances")
+            print("no tracktake instances")
         total = 0.0
         for st in states:
             if args.action == "down":
@@ -144,10 +144,10 @@ def cmd_vast(args: argparse.Namespace) -> int:
             vast.provision(state, s)
             state = vast.open_tunnel(state, s)
             print(f"{_comfy_ready(state.url)} at {state.url}")
-            print("use it with SUNOMV_COMFY_BACKEND=vast (or backend = \"vast\" in config/sunomv.toml)")
+            print("use it with TRACKTAKE_COMFY_BACKEND=vast (or backend = \"vast\" in config/tracktake.toml)")
         except Exception as e:  # noqa: BLE001 - any failure after renting must stop billing
             if args.keep_on_error:
-                print(f"error: {e}\ninstance {state.instance_id} is still billed; `sunomv vast down` stops it")
+                print(f"error: {e}\ninstance {state.instance_id} is still billed; `tracktake vast down` stops it")
             else:
                 cost = vast.destroy(state)
                 print(f"error: {e}\ndestroyed instance {state.instance_id} (~${cost:.2f})")
@@ -156,7 +156,7 @@ def cmd_vast(args: argparse.Namespace) -> int:
     if args.action == "fleet":
         return _vast_fleet(args, s)
     if state is None:
-        print("no sunomv instance")
+        print("no tracktake instance")
         return 0 if args.action != "tunnel" else 1
     if args.action == "status":
         info = json.loads(vast.run_cli(["show", "instance", str(state.instance_id), "--raw"]))
@@ -271,7 +271,7 @@ def cmd_remote(args: argparse.Namespace) -> int:
         return 0
     finally:
         if args.keep:
-            print("--keep: workers left running; `sunomv vast down --all` stops billing")
+            print("--keep: workers left running; `tracktake vast down --all` stops billing")
         else:
             total = sum(vast.destroy(st) for st in vast.all_states())
             print(f"freed all workers (~${total:.2f} by local estimate; see `vastai show invoices` for the bill)")
@@ -280,7 +280,7 @@ def cmd_remote(args: argparse.Namespace) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     from .server import serve
 
-    print(f"sunomv UI: http://{args.host}:{args.port}")
+    print(f"tracktake UI: http://{args.host}:{args.port}")
     serve(args.host, args.port)
     return 0
 
@@ -301,7 +301,7 @@ def cmd_projects(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="sunomv")
+    p = argparse.ArgumentParser(prog="tracktake")
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("analyze", help="audio + lyrics analysis -> <out>/analysis.json")
     a.add_argument("song", help="audio file (mp3/wav/...)")
@@ -323,7 +323,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--keep-on-error", action="store_true", help="do not destroy the instance if setup fails")
     v.add_argument("--name", default="main", help="worker name; several named instances can run at once")
     v.add_argument("--port", type=int, help="local tunnel port for this worker (default [vast].local_port)")
-    v.add_argument("--all", action="store_true", help="status/down: every sunomv instance")
+    v.add_argument("--all", action="store_true", help="status/down: every tracktake instance")
     v.add_argument("--count", type=int, default=4, help="fleet: number of workers")
     v.add_argument("--min-net", type=int, help="fleet: minimum download speed in Mb/s")
     v.set_defaults(func=cmd_vast)

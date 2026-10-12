@@ -1,7 +1,7 @@
 """Background jobs for the web UI: one thread per job, live log + progress, cancel, history kept across restarts.
 
 Long or memory-heavy work (analysis, Vast render) runs as a child process so the server stays responsive; a cancelled
-child gets SIGINT first, which lets `sunomv remote run` reach its `finally` and free the rented GPUs.
+child gets SIGINT first, which lets `tracktake remote run` reach its `finally` and free the rented GPUs.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sunomv.project import PROJECTS
+from tracktake.project import PROJECTS
 
 
 def _now() -> str:
@@ -38,7 +38,7 @@ class Job:
     id: str
     kind: str
     project: str
-    title: str
+    title: str  # English fallback; the UI builds a localized title from `kind` + `params`
     status: str = "queued"
     progress: dict | None = None
     message: str = ""
@@ -47,9 +47,11 @@ class Job:
     log: deque = field(default_factory=lambda: deque(maxlen=500))
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     proc: subprocess.Popen | None = field(default=None, repr=False)
+    params: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {"id": self.id, "kind": self.kind, "project": self.project, "status": self.status, "title": self.title,
+                "params": self.params,
                 "progress": self.progress, "message": self.message, "started": self.started,
                 "finished": self.finished, "log_tail": list(self.log)[-40:]}
 
@@ -108,13 +110,14 @@ class JobManager:
         self.lock = threading.Lock()
         self._load()
 
-    def submit(self, kind: str, project: str, title: str, fn: Callable[[Context], None]) -> Job:
+    def submit(self, kind: str, project: str, title: str, fn: Callable[[Context], None],
+               params: dict | None = None) -> Job:
         with self.lock:
             busy = [j for j in self.jobs.values() if j.project == project and j.kind == kind
                     and j.status in ("queued", "running")]
             if busy:
                 raise Conflict(f"{kind} is already running for {project}")
-            job = Job(uuid.uuid4().hex[:12], kind, project, title)
+            job = Job(uuid.uuid4().hex[:12], kind, project, title, params=params or {})
             self.jobs[job.id] = job
         threading.Thread(target=self._run, args=(job, fn), daemon=True).start()
         return job
@@ -130,7 +133,7 @@ class JobManager:
                 job.progress["done"] = max(job.progress["done"], 0)
         except Cancelled:
             job.status = "cancelled"
-            ctx.log("anulowano")
+            ctx.log("cancelled")
         except Exception as e:  # noqa: BLE001 - the job reports the error, the server keeps running
             job.status = "failed"
             ctx.log(f"ERROR: {e}")
@@ -160,10 +163,10 @@ class JobManager:
             return
         for d in json.loads(self.history.read_text()):
             job = Job(d["id"], d["kind"], d["project"], d["title"], d["status"], d.get("progress"), d.get("message", ""),
-                      d.get("started"), d.get("finished"))
+                      d.get("started"), d.get("finished"), params=d.get("params") or {})
             job.log.extend(d.get("log_tail", []))
             if job.status in ("queued", "running"):
-                job.status, job.message = "failed", "przerwane: serwer został zrestartowany"
+                job.status, job.message = "failed", "interrupted: the server was restarted"
             self.jobs[job.id] = job
 
 
@@ -171,7 +174,7 @@ CLIP_PROGRESS = re.compile(r"(w\d+) (\d+)/(\d+)")
 
 
 def clip_progress(ctx: Context) -> Callable[[str], None]:
-    """Parse `clips codex: w1 10/23, w2 9/22 (...)` lines of `sunomv remote run` into one progress bar."""
+    """Parse `clips codex: w1 10/23, w2 9/22 (...)` lines of `tracktake remote run` into one progress bar."""
 
     def parse(line: str) -> None:
         if line.startswith("clips "):

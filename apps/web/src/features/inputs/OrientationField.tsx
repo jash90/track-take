@@ -7,6 +7,7 @@ import { useToast } from "../../components/Toaster";
 import { InlineError } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { FrameGlyph, ORIENTATIONS, orientationInfo, projectOrientation } from "../../lib/orientation";
+import { Trans, useT } from "../../i18n";
 
 /** Project format: shown prominently, changeable behind a confirmation (it is saved immediately). */
 export function OrientationField({ project }: { project: Project }) {
@@ -14,6 +15,7 @@ export function OrientationField({ project }: { project: Project }) {
   const [pending, setPending] = useState<Orientation | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
   const change = useMutation({
     mutationFn: (o: Orientation) => api.patchProject(project.id, { orientation: o }),
     onSuccess: (p) => {
@@ -22,7 +24,8 @@ export function OrientationField({ project }: { project: Project }) {
         void qc.invalidateQueries({ queryKey: k });
       }
       setPending(null);
-      toast(`Format zmieniony na ${orientationInfo(projectOrientation(p)).label.toLowerCase()} ${orientationInfo(projectOrientation(p)).ratio}`, "ok");
+      const info = orientationInfo(projectOrientation(p));
+      toast(t("orientField.toast", { label: t(info.label).toLowerCase(), ratio: info.ratio }), "ok");
     },
   });
   const hasWork = (project.stage.keys.codex ?? 0) + (project.stage.keys.comfy ?? 0) > 0 ||
@@ -31,7 +34,7 @@ export function OrientationField({ project }: { project: Project }) {
 
   return (
     <div>
-      <div className="label" id="orient-label">Format teledysku</div>
+      <div className="label" id="orient-label">{t("orientField.label")}</div>
       <div role="radiogroup" aria-labelledby="orient-label" className="grid grid-cols-2 gap-2">
         {ORIENTATIONS.map((o) => {
           const on = current === o.value;
@@ -49,31 +52,34 @@ export function OrientationField({ project }: { project: Project }) {
             >
               <FrameGlyph orientation={o.value} size={22} className={on ? "text-safe" : undefined} />
               <span className="flex flex-col leading-tight">
-                <span className="text-[0.88rem]">{o.label} <span className="font-mono text-[0.75rem]">{o.ratio}</span></span>
-                <span className="text-[0.68rem] text-ink-500">{o.hint}</span>
+                <span className="text-[0.88rem]">{t(o.label)} <span className="font-mono text-[0.75rem]">{o.ratio}</span></span>
+                <span className="text-[0.68rem] text-ink-500">{t(o.hint)}</span>
               </span>
             </button>
           );
         })}
       </div>
       <p className="mt-1.5 text-[0.72rem] leading-relaxed text-ink-500">
-        Klatki kluczowe i wideo powstają tylko w tym formacie. Zmiana później oznacza wygenerowanie ich od nowa.
+        {t("orientField.note")}
       </p>
       <ConfirmDialog
         open={pending !== null}
-        title="Zmienić format?"
-        confirmLabel={target ? `Zmień na ${target.ratio}` : "Zmień"}
+        title={t("orientField.confirmTitle")}
+        confirmLabel={target ? t("orientField.confirmTo", { ratio: target.ratio }) : t("orientField.confirm")}
         busy={change.isPending}
         onConfirm={() => pending && change.mutate(pending)}
         onClose={() => setPending(null)}
       >
         {target && (
           <>
-            Projekt przejdzie na format <b>{target.label.toLowerCase()} {target.ratio}</b> ({target.hint}).{" "}
+            <Trans
+              k="orientField.body"
+              values={{ target: <b>{t(target.label).toLowerCase()} {target.ratio}</b>, hint: t(target.hint) }}
+            />{" "}
             {hasWork
-              ? "Klatki i filmy w obecnym formacie zostaną zachowane na dysku, ale przestaną być widoczne — dla nowego formatu trzeba wygenerować klatki i wyrenderować wideo od nowa."
-              : "Klatki i wideo powstaną już w nowym formacie."}{" "}
-            Storyboard i analiza zostają bez zmian.
+              ? t("orientField.hasWork")
+              : t("orientField.noWork")}{" "}
+            {t("orientField.keeps")}
           </>
         )}
         <InlineError error={change.error} />

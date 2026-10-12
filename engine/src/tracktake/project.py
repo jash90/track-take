@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sunomv.config import REPO_ROOT
+from tracktake.config import REPO_ROOT
 
 PROJECTS = REPO_ROOT / "data" / "projects"
 KEY_SETS = ("codex", "comfy")

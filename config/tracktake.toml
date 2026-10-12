@@ -1,4 +1,4 @@
-# suno-audio-wideo settings. Environment variables override single values (see engine/src/sunomv/config.py).
+# suno-audio-wideo settings. Environment variables override single values (see engine/src/tracktake/config.py).
 
 [comfy]
 # local = ComfyUI on this Mac (~/Projects/ComfyUI), vast = ComfyUI on a rented Vast.ai GPU reached through an SSH tunnel

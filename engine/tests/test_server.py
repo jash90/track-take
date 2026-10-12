@@ -4,14 +4,14 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from sunomv import project, storyboard
-from sunomv.models import Analysis, LyricLine, Section
+from tracktake import project, storyboard
+from tracktake.models import Analysis, LyricLine, Section
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(project, "PROJECTS", tmp_path / "projects")
-    from sunomv import jobs, server
+    from tracktake import jobs, server
 
     monkeypatch.setattr(server, "jobs", jobs.JobManager(tmp_path / "jobs.json"))
     return TestClient(server.app)
@@ -104,7 +104,7 @@ def test_cuts_only_on_big_sections_and_continuity_helpers():
 
 
 def test_codex_chains_follow_continuity(tmp_path):
-    from sunomv.codex_images import ImageJob, chains
+    from tracktake.codex_images import ImageJob, chains
 
     a, b, c, d = (tmp_path / f"{n}.png" for n in "abcd")
     jobs = [ImageJob(a, "", "landscape"), ImageJob(b, "", "landscape", previous=a),

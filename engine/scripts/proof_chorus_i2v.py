@@ -5,7 +5,7 @@ generated at 12 fps so each generated frame is held for two output frames (stop-
 locks drawing changes to beats and adds the beat pump, captions and audio.
 
 Usage: uv run python scripts/proof_chorus_i2v.py <fixture_dir> <work_dir> [--backend local|vast] [--hd]
-  local = LTX-2.3 on this Mac (MLX); vast = Wan 2.2 14B in ComfyUI on the rented GPU (`sunomv vast up --yes` first)
+  local = LTX-2.3 on this Mac (MLX); vast = Wan 2.2 14B in ComfyUI on the rented GPU (`tracktake vast up --yes` first)
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ from pathlib import Path
 
 import cv2
 
-from sunomv import config
-from sunomv.assets import AssetLibrary
-from sunomv.ltx import ClipSpec, fit_cover
-from sunomv.models import Analysis
-from sunomv.render.compositor import LANDSCAPE, PORTRAIT, Camera, Format, Layer, Shot, compose, to_rgba
-from sunomv.render.stepping import drawing_frames
-from sunomv.render.timeline import render
-from sunomv.timegrid import frame_at, frames_of, nearest
-from sunomv.video import backend_for
+from tracktake import config
+from tracktake.assets import AssetLibrary
+from tracktake.ltx import ClipSpec, fit_cover
+from tracktake.models import Analysis
+from tracktake.render.compositor import LANDSCAPE, PORTRAIT, Camera, Format, Layer, Shot, compose, to_rgba
+from tracktake.render.stepping import drawing_frames
+from tracktake.render.timeline import render
+from tracktake.timegrid import frame_at, frames_of, nearest
+from tracktake.video import backend_for
 
 FPS = 24
 SUFFIX = ("Stop-motion paper cut-out animation, layered construction paper, visible paper texture, "

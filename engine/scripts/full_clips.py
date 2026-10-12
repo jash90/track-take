@@ -22,11 +22,11 @@ from pathlib import Path
 import cv2
 from PIL import Image
 
-from sunomv.comfy.client import ComfyClient
-from sunomv.ltx import ClipSpec, fit_cover
-from sunomv.shards import split_args, wanted
-from sunomv.storyboard import continues_into
-from sunomv.video import PROFILES, ComfyWanBackend
+from tracktake.comfy.client import ComfyClient
+from tracktake.ltx import ClipSpec, fit_cover
+from tracktake.shards import split_args, wanted
+from tracktake.storyboard import continues_into
+from tracktake.video import PROFILES, ComfyWanBackend
 
 PROFILE = PROFILES["wan"]
 SUFFIX = "Stop-motion paper cut-out animation, layered construction paper, visible paper texture."
@@ -34,7 +34,7 @@ SUFFIX = "Stop-motion paper cut-out animation, layered construction paper, visib
 
 def revive_tunnel(url: str) -> None:
     """Reopen the SSH tunnel of the Vast worker behind `url` if it died (e.g. under memory pressure)."""
-    from sunomv import config, vast
+    from tracktake import config, vast
 
     port = int(url.rsplit(":", 1)[1])
     for state in vast.all_states():

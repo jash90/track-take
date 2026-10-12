@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from sunomv import config, vast
-from sunomv.config import VastSettings
+from tracktake import config, vast
+from tracktake.config import VastSettings
 
 OFFERS = [
     {"id": 1, "gpu_name": "RTX 4090", "dph_total": 0.34, "reliability2": 0.997, "inet_down": 765, "disk_space": 1486,
@@ -82,8 +82,8 @@ def test_destroy_removes_state_and_estimates_cost():
 def test_config_env_override(tmp_path, monkeypatch):
     cfg = tmp_path / "s.toml"
     cfg.write_text('[comfy]\nbackend = "local"\n[vast]\ngpu = "RTX_4090"\nlocal_port = 8189\n')
-    monkeypatch.setenv("SUNOMV_COMFY_BACKEND", "vast")
-    monkeypatch.setenv("SUNOMV_VAST_MODELS", "wan22_i2v, zimage")
+    monkeypatch.setenv("TRACKTAKE_COMFY_BACKEND", "vast")
+    monkeypatch.setenv("TRACKTAKE_VAST_MODELS", "wan22_i2v, zimage")
     s = config.load(cfg)
     assert s.comfy.backend == "vast"
     assert s.comfy_url == "http://127.0.0.1:8189"

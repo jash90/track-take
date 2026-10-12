@@ -117,10 +117,10 @@ pre{background:var(--code-background,#f4f4f2);color:var(--code-foreground,inheri
 </table>
 <pre>cd engine
 # bez --yes: tylko plan i wycena; karty zawsze zwalniane na końcu
-uv run sunomv remote run --full ../data/work/silence/full --set codex \
+uv run tracktake remote run --full ../data/work/silence/full --set codex \
   --song ../data/fixtures/silence/song.mp3 --analysis ../data/work/silence/analysis.json --workers 4 --yes
-uv run sunomv remote run ... --set comfy --workers 4 --yes
-uv run sunomv remote analyze --song song.mp3 --lyrics lyrics.txt --out wynik/ --yes</pre>
+uv run tracktake remote run ... --set comfy --workers 4 --yes
+uv run tracktake remote analyze --song song.mp3 --lyrics lyrics.txt --out wynik/ --yes</pre>
 
 <script>
 const S=[["gpu","GPU","--series-1"],["dl","Pobieranie","--series-2"],["st","Dysk","--series-3"],["up","Wysyłanie","--series-4"]];

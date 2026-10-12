@@ -7,9 +7,9 @@ from pathlib import Path
 
 from PIL import Image
 
-from sunomv.codex_images import ImageJob, generate, generate_all
-from sunomv.project import KEY_SETS, ORIENTATIONS, Project
-from sunomv.storyboard import is_cut
+from tracktake.codex_images import ImageJob, generate, generate_all
+from tracktake.project import KEY_SETS, ORIENTATIONS, Project
+from tracktake.storyboard import is_cut
 
 FRAMING = {
     "landscape": "Cinematic horizontal composition; keep the main subject and action inside the central 16:9 area.",

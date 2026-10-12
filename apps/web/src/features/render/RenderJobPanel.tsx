@@ -6,13 +6,15 @@ import type { Job } from "../../api/types";
 import { Button, Chip, InlineError, ProgressBar } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { elapsed, formatClock } from "../../lib/format";
+import { useT } from "../../i18n";
+import { jobTitle } from "../jobs/jobTitle";
 
 const TONE = { queued: "warn", running: "live", done: "ok", failed: "err", cancelled: "neutral" } as const;
-const LABEL = { queued: "w kolejce", running: "renderuje", done: "gotowe", failed: "błąd", cancelled: "anulowany" } as const;
 
 /** Big, always-expanded view of the current (or last) render job. */
 export function RenderJobPanel({ job, projectId }: { job: Job; projectId: string }) {
   const qc = useQueryClient();
+  const t = useT();
   const log = useRef<HTMLPreElement>(null);
   const active = isActive(job);
   const cancel = useMutation({
@@ -30,19 +32,19 @@ export function RenderJobPanel({ job, projectId }: { job: Job; projectId: string
   return (
     <section className={cx("overflow-hidden rounded-xl border", active ? "border-safe/50 bg-safe/[0.04]" : "border-ink-700 bg-ink-850")}>
       <div className="flex flex-wrap items-center gap-4 px-5 py-4">
-        <Chip tone={TONE[job.status]}>{LABEL[job.status]}</Chip>
+        <Chip tone={TONE[job.status]}>{t(`rjob.${job.status}`)}</Chip>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.95rem]">{job.title}</div>
+          <div className="truncate text-[0.95rem]">{jobTitle(job, t)}</div>
           <div className="truncate font-mono text-[0.75rem] text-ink-400">{job.message || "—"}</div>
         </div>
         {pct !== null && <div className="font-display text-5xl leading-none tabular text-ink-100">{pct}%</div>}
         <div className="text-right font-mono text-[0.7rem] text-ink-500 tabular">
-          <div>start {formatClock(job.started)}</div>
+          <div>{t("rjob.start", { time: formatClock(job.started) })}</div>
           <div>{elapsed(job.started, job.finished)}</div>
         </div>
         {active && (
           <Button variant="danger" size="sm" busy={cancel.isPending} onClick={() => cancel.mutate()}>
-            Przerwij render
+            {t("rjob.stop")}
           </Button>
         )}
       </div>

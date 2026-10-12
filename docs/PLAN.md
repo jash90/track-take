@@ -313,7 +313,7 @@ Na tym sprzęcie: **Rhubarb Lip Sync** wyznacza z wokalu i tekstu kształty ust 
 │ Comfy Cloud), gdyby kiedyś pojawiło się mocniejsze GPU                       │
 │ Custom nodes: VideoHelperSuite, KJNodes, IPAdapter, ControlNet-aux,          │
 │ Frame-Interpolation (RIFE), Wan (natywny + opcjonalnie WanVideoWrapper),     │
-│ Yvann-Nodes / RyanOnTheInside (tryb D), [własne: sunomv-nodes, opcjonalnie]  │
+│ Yvann-Nodes / RyanOnTheInside (tryb D), [własne: tracktake-nodes, opcjonalnie]  │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -322,7 +322,7 @@ Na tym sprzęcie: **Rhubarb Lip Sync** wyznacza z wokalu i tekstu kształty ust 
 - **Klient ComfyUI** wysyła wejścia (`/upload/image`), zleca zadanie przez `POST /prompt` i nasłuchuje na `/ws?clientId=…` komunikatów `progress`, `executed`, `execution_success` i `execution_error`. Wyniki pobiera przez `/history/{id}` i `/view`. Comfy Cloud ma zgodne API (`/api/prompt`, `X-API-Key`), więc jeden klient obsługuje oba przypadki.
 - **Wiele backendów** z harmonogramem: ujęcia rozdzielane na dostępne GPU. Heartbeat sprawdza każdy backend i wznawia pracę po restarcie ComfyUI.
 - **Determinizm:** każdy take zapisuje pełny graf promptu, seed oraz wersje modeli i LoRA (hashe), więc da się go dokładnie odtworzyć.
-- **Własne node'y (`sunomv-nodes`), opcjonalnie, od fazy 4:** tylko jeśli przekazywanie parametrów per rysunek przez API okaże się niewystarczające. Na przykład node, który przyjmuje JSON harmonogramu i zwraca wartości per klatka albo batche.
+- **Własne node'y (`tracktake-nodes`), opcjonalnie, od fazy 4:** tylko jeśli przekazywanie parametrów per rysunek przez API okaże się niewystarczające. Na przykład node, który przyjmuje JSON harmonogramu i zwraca wartości per klatka albo batche.
 
 ### 5.2 Sprzęt
 Rozstrzygnięte w sekcji 0.7. Wszystko działa na Macu (M1 Pro): ComfyUI (MPS), aplikacja, analiza i renderer. Desktop jest opcjonalnym workerem postprocessingu. Klient ComfyUI jest wspólny, więc ewentualna zmiana backendu w przyszłości to zmiana konfiguracji, a nie kodu.

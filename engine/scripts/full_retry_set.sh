@@ -14,8 +14,8 @@ PY
 }
 
 step "fleet x$COUNT"
-uv run sunomv vast fleet --count "$COUNT" --min-net 900 --max-dph 0.5 --yes
-URLS=$(python3 -c "import glob, json, os; print(' '.join(sorted('http://127.0.0.1:%d' % json.load(open(p))['local_port'] for p in glob.glob(os.path.expanduser('~/.config/sunomv/vast-*.json')))))")
+uv run tracktake vast fleet --count "$COUNT" --min-net 900 --max-dph 0.5 --yes
+URLS=$(python3 -c "import glob, json, os; print(' '.join(sorted('http://127.0.0.1:%d' % json.load(open(p))['local_port'] for p in glob.glob(os.path.expanduser('~/.config/tracktake/vast-*.json')))))")
 [ -z "$URLS" ] && { step "no workers"; exit 1; }
 step "workers: $URLS"
 
@@ -26,7 +26,7 @@ for pass in 1 2; do
 done
 
 step "missing after passes: $(missing); freeing the GPUs"
-uv run sunomv vast down --all
+uv run tracktake vast down --all
 
 step "render $SET"
 uv run python scripts/full_render.py "$FULL" "$ANALYSIS" "$SONG" "$SET" > "$FULL/render_$SET.log" 2>&1

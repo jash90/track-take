@@ -1,6 +1,6 @@
 import pytest
 
-from sunomv.lyrics import clean_line, kind_of, parse_lyrics, split_tag, sung_lines
+from tracktake.lyrics import clean_line, kind_of, parse_lyrics, split_tag, sung_lines
 
 EXCERPT = """\
 [Short Instrumental Intro: Soft Piano, Distant Pad]

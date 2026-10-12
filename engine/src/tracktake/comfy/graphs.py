@@ -56,7 +56,7 @@ def zimage(
     steps: int = 8,
     init_image: str | None = None,
     denoise: float = 1.0,
-    prefix: str = "sunomv/zimage",
+    prefix: str = "tracktake/zimage",
     m: ZImageModels | None = None,
 ) -> dict:
     """Z-Image Turbo txt2img, or img2img when `init_image` (an uploaded input name) is given."""
@@ -108,7 +108,7 @@ def qwen_edit(
     resolution: int = 1024,
     steps: int = 25,
     negative: str = "",
-    prefix: str = "sunomv/qwen",
+    prefix: str = "tracktake/qwen",
     m: QwenImageModels | None = None,
 ) -> dict:
     """Qwen-Image 2.1 generation conditioned on up to 16 uploaded reference images (cover, character, previous frame)."""
@@ -149,7 +149,7 @@ def wan_i2v(
     height: int = 480,
     length: int = 49,
     negative: str = WAN_NEGATIVE,
-    prefix: str = "sunomv/wan",
+    prefix: str = "tracktake/wan",
     m: WanI2VModels | None = None,
     end_image: str | None = None,
 ) -> dict:

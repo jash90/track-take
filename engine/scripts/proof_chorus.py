@@ -14,12 +14,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from sunomv.assets import AssetLibrary, AssetSpec
-from sunomv.comfy.client import ComfyClient
-from sunomv.models import Analysis
-from sunomv.render.compositor import LANDSCAPE, PORTRAIT, Camera, Layer, Shot, to_rgba
-from sunomv.render.timeline import render
-from sunomv.timegrid import frame_at, nearest
+from tracktake.assets import AssetLibrary, AssetSpec
+from tracktake.comfy.client import ComfyClient
+from tracktake.models import Analysis
+from tracktake.render.compositor import LANDSCAPE, PORTRAIT, Camera, Layer, Shot, to_rgba
+from tracktake.render.timeline import render
+from tracktake.timegrid import frame_at, nearest
 
 FPS = 24
 STYLE = (

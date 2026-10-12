@@ -6,13 +6,15 @@ import { FormatBadge, formatRatio, projectFormat, projectOrientation } from "../
 import { useWorkspace } from "../workspace/context";
 import { CompareView } from "./CompareView";
 import { SetPlayers } from "./SetPlayers";
+import { useT } from "../../i18n";
 
 export function ResultStep() {
   const { project } = useWorkspace();
   const q = useVideos(project.id);
+  const t = useT();
   const format = projectFormat(project);
 
-  if (q.isPending) return <Loading label="Szukam wyrenderowanych plików…" />;
+  if (q.isPending) return <Loading label={t("result.loading")} />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
 
   // only the project format; files of the other orientation (from before a switch) stay hidden
@@ -25,12 +27,12 @@ export function ResultStep() {
 
   return (
     <div>
-      <StepHeader index="05" title="Wynik" actions={<FormatBadge orientation={projectOrientation(project)} />}>
-        Teledysk w formacie {formatRatio(format)}: podgląd do szybkiego obejrzenia i master w pełnej jakości do publikacji.
+      <StepHeader index="05" title={t("step.result")} actions={<FormatBadge orientation={projectOrientation(project)} />}>
+        {t("result.lead", { ratio: formatRatio(format) })}
       </StepHeader>
       {sets.length === 0 ? (
-        <Empty title="Jeszcze nic nie wyrenderowano" action={<Link to="../wideo" className="text-sm text-safe hover:underline">→ Render na Vast</Link>}>
-          Gdy render się skończy, wideo {formatRatio(format)} pojawi się tutaj.
+        <Empty title={t("result.empty")} action={<Link to="../wideo" className="text-sm text-safe hover:underline">{t("result.toRender")}</Link>}>
+          {t("result.emptyBody", { ratio: formatRatio(format) })}
         </Empty>
       ) : (
         <div className="flex flex-col gap-6">

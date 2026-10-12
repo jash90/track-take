@@ -12,8 +12,8 @@ from functools import lru_cache
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from sunomv.models import LyricLine
-from sunomv.render.compositor import Format
+from tracktake.models import LyricLine
+from tracktake.render.compositor import Format
 
 FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",

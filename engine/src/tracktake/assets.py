@@ -15,8 +15,8 @@ from typing import Literal
 import numpy as np
 from PIL import Image
 
-from sunomv.comfy.client import ComfyClient
-from sunomv.comfy.graphs import zimage
+from tracktake.comfy.client import ComfyClient
+from tracktake.comfy.graphs import zimage
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ class AssetLibrary:
         if self.client is None:
             raise RuntimeError(f"asset {spec.id} is missing and no ComfyUI client was given")
         result = self.client.run(zimage(spec.prompt, seed=spec.seed, width=spec.size, height=spec.size,
-                                        prefix=f"sunomv/assets/{spec.id}"))
+                                        prefix=f"tracktake/assets/{spec.id}"))
         img = Image.open(io.BytesIO(result.images[0])).convert("RGB")
         seconds = result.seconds
         if spec.kind == "cutout":

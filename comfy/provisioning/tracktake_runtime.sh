@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON a Vast worker (piped over ssh by sunomv.remote): what the engine scripts need besides ComfyUI.
+# Runs ON a Vast worker (piped over ssh by tracktake.remote): what the engine scripts need besides ComfyUI.
 # Usage: bash -s -- <remote_root> [analysis]
 set -euo pipefail
 ROOT=$1; WITH_ANALYSIS=${2:-}

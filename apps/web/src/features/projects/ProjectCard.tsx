@@ -4,14 +4,16 @@ import { cx } from "../../lib/cx";
 import { formatDate } from "../../lib/format";
 import { FormatBadge, projectFormat, projectOrientation } from "../../lib/orientation";
 import { keysSummary, projectStages } from "./stages";
+import { useT } from "../../i18n";
 
-function vidsTitle(p: Project): string {
+function vidsTitle(p: Project, none: string): string {
   const f = projectFormat(p);
-  return (["codex", "comfy"] as const).filter((s) => p.stage.videos[s]?.includes(f)).join(", ") || "brak";
+  return (["codex", "comfy"] as const).filter((s) => p.stage.videos[s]?.includes(f)).join(", ") || none;
 }
 
 export function ProjectCard({ project, index }: { project: Project; index: number }) {
-  const stages = projectStages(project);
+  const t = useT();
+  const stages = projectStages(project, t);
   const cover = project.inputs.cover;
   return (
     <Link
@@ -42,11 +44,11 @@ export function ProjectCard({ project, index }: { project: Project; index: numbe
           {project.style && <p className="mt-0.5 line-clamp-1 text-[0.8rem] text-ink-300">{project.style}</p>}
         </div>
       </div>
-      <ol className="grid grid-cols-5 border-t border-ink-700" aria-label="Etapy">
+      <ol className="grid grid-cols-5 border-t border-ink-700" aria-label={t("stage.aria")}>
         {stages.map((s) => (
           <li
             key={s.key}
-            title={s.key === "keys" ? keysSummary(project) : s.key === "videos" ? `Wyrenderowane zestawy: ${vidsTitle(project)}` : `${s.label}: ${s.value}`}
+            title={s.key === "keys" ? keysSummary(project, t) : s.key === "videos" ? t("stage.renderedSets", { sets: vidsTitle(project, t("stage.none")) }) : `${s.label}: ${s.value}`}
             className="flex flex-col items-center gap-1 border-r border-ink-750 px-1 py-2.5 last:border-r-0"
           >
             <span

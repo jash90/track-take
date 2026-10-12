@@ -8,7 +8,7 @@ step() { echo "== $(date +%H:%M:%S) $*"; }
 step "waiting for the fleet"
 until grep -q "^exit" "$FLEET_LOG"; do sleep 10; done
 # workers that came up keep a state file; failed ones were destroyed together with theirs
-URLS=$(python3 -c "import glob, json, os; print(' '.join(sorted('http://127.0.0.1:%d' % json.load(open(p))['local_port'] for p in glob.glob(os.path.expanduser('~/.config/sunomv/vast-*.json')))))")
+URLS=$(python3 -c "import glob, json, os; print(' '.join(sorted('http://127.0.0.1:%d' % json.load(open(p))['local_port'] for p in glob.glob(os.path.expanduser('~/.config/tracktake/vast-*.json')))))")
 if [ -z "$URLS" ]; then step "fleet failed"; exit 1; fi
 step "fleet ready: $URLS"
 
@@ -28,7 +28,7 @@ step "clips: comfy set"
 uv run python scripts/full_clips.py "$FULL" comfy $URLS
 
 step "freeing the GPUs"
-uv run sunomv vast down --all
+uv run tracktake vast down --all
 
 step "render: comfy"
 uv run python scripts/full_render.py "$FULL" "$ANALYSIS" "$SONG" comfy > "$FULL/render_comfy.log" 2>&1

@@ -1,6 +1,6 @@
 import pytest
 
-from sunomv.render import encoders
+from tracktake.render import encoders
 
 
 @pytest.fixture(autouse=True)
@@ -13,13 +13,13 @@ def clear_cache():
 
 
 def test_forced_family(monkeypatch):
-    monkeypatch.setenv("SUNOMV_ENCODER", "nvenc")
+    monkeypatch.setenv("TRACKTAKE_ENCODER", "nvenc")
     assert encoders.video_args("h264", "14M")[:4] == ["-c:v", "h264_nvenc", "-b:v", "14M"]
     assert "hvc1" in encoders.video_args("hevc", "1M")
 
 
 def test_cpu_fallback_on_linux_without_gpu(monkeypatch):
-    monkeypatch.delenv("SUNOMV_ENCODER", raising=False)
+    monkeypatch.delenv("TRACKTAKE_ENCODER", raising=False)
     monkeypatch.setattr(encoders.platform, "system", lambda: "Linux")
     monkeypatch.setattr(encoders, "_available", lambda: frozenset({"libx264", "libx265", "h264_nvenc"}))
     monkeypatch.setattr(encoders.shutil, "which", lambda name: None)  # no nvidia-smi
@@ -32,6 +32,6 @@ def test_cpu_fallback_on_linux_without_gpu(monkeypatch):
 
 
 def test_bad_override(monkeypatch):
-    monkeypatch.setenv("SUNOMV_ENCODER", "quantum")
+    monkeypatch.setenv("TRACKTAKE_ENCODER", "quantum")
     with pytest.raises(ValueError):
         encoders.family()

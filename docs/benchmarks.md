@@ -5,7 +5,7 @@ Warunki: **duże obciążenie pamięci**. Swap zajęty w 21,7 z 23,5 GB; Docker 
 
 Utwór testowy: „Where the Silence Hurts – A” (Suno, 4:29, 81 BPM), tekst z tagu ID3, okładka 360×360.
 
-## Analiza audio i tekstu (`sunomv analyze`)
+## Analiza audio i tekstu (`tracktake analyze`)
 | Krok | Czas | Metoda |
 |---|---|---|
 | Stemy | 36,6 s | demucs htdemucs (MPS) |

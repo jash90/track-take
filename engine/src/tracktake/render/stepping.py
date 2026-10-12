@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sunomv.timegrid import frame_at
+from tracktake.timegrid import frame_at
 
 
 def drawing_frames(

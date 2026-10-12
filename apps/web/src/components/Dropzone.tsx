@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cx } from "../lib/cx";
+import { useT } from "../i18n";
 
 interface DropzoneProps {
   accept: string;
@@ -23,6 +24,7 @@ export function Dropzone({ accept, match, label, hint, file, onFile, children, c
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [reject, setReject] = useState<string | null>(null);
+  const t = useT();
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
@@ -30,7 +32,7 @@ export function Dropzone({ accept, match, label, hint, file, onFile, children, c
     const f = e.dataTransfer.files[0];
     if (!f) return;
     if (!accepts(f, match)) {
-      setReject(`„${f.name}” — nieobsługiwany typ pliku`);
+      setReject(t("dropzone.unsupported", { name: f.name }));
       return;
     }
     setReject(null);
@@ -62,7 +64,7 @@ export function Dropzone({ accept, match, label, hint, file, onFile, children, c
           {label}
         </button>
         <div id={`${id}-hint`} className="min-w-0 text-[0.75rem] text-ink-400">
-          {file ? <span className="truncate text-ink-200">nowy: {file.name}</span> : hint}
+          {file ? <span className="truncate text-ink-200">{t("dropzone.new", { name: file.name })}</span> : hint}
           {reject && <div className="text-err">{reject}</div>}
         </div>
       </div>

@@ -16,10 +16,10 @@ from typing import Protocol
 import numpy as np
 from PIL import Image
 
-from sunomv import ltx
-from sunomv.comfy.client import ComfyClient
-from sunomv.comfy.graphs import wan_i2v
-from sunomv.config import Settings
+from tracktake import ltx
+from tracktake.comfy.client import ComfyClient
+from tracktake.comfy.graphs import wan_i2v
+from tracktake.config import Settings
 
 
 @dataclass(frozen=True)
@@ -72,10 +72,10 @@ class ComfyWanBackend:
         if meta.exists() and json.loads(meta.read_text()).get("key") == key:
             return _read_pngs(frames_dir), 0.0
         started = time.monotonic()
-        name = self.client.upload_image(start_image, f"sunomv_{spec.id}.png")
-        end = self.client.upload_image(end_image, f"sunomv_{spec.id}_end.png") if end_image else None
+        name = self.client.upload_image(start_image, f"tracktake_{spec.id}.png")
+        end = self.client.upload_image(end_image, f"tracktake_{spec.id}_end.png") if end_image else None
         graph = wan_i2v(spec.prompt, name, seed=spec.seed, width=spec.width, height=spec.height,
-                        length=spec.frames, prefix=f"sunomv/clips/{spec.id}", end_image=end)
+                        length=spec.frames, prefix=f"tracktake/clips/{spec.id}", end_image=end)
         result = self.client.run(graph)
         frames_dir.mkdir(parents=True, exist_ok=True)
         for old in frames_dir.glob("*.png"):

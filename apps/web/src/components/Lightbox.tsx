@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Dialog } from "./Dialog";
+import { useT } from "../i18n";
 
 export interface LightboxItem {
   src: string;
@@ -16,6 +17,7 @@ export function Lightbox({ items, index, onIndex }: LightboxProps) {
   const open = index !== null && items.length > 0;
   const i = index ?? 0;
   const item = items[Math.min(i, items.length - 1)];
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +43,7 @@ export function Lightbox({ items, index, onIndex }: LightboxProps) {
               type="button"
               onClick={() => onIndex((i - 1 + items.length) % items.length)}
               className="rounded-md border border-ink-600 px-3 py-1 hover:border-ink-300"
-              aria-label="Poprzednia"
+              aria-label={t("common.prev")}
             >
               ←
             </button>
@@ -52,18 +54,18 @@ export function Lightbox({ items, index, onIndex }: LightboxProps) {
               type="button"
               onClick={() => onIndex((i + 1) % items.length)}
               className="rounded-md border border-ink-600 px-3 py-1 hover:border-ink-300"
-              aria-label="Następna"
+              aria-label={t("common.next")}
             >
               →
             </button>
             <a href={item.src} target="_blank" rel="noreferrer" className="text-ink-400 underline-offset-2 hover:text-ink-100 hover:underline">
-              otwórz
+              {t("common.open")}
             </a>
             <button
               type="button"
               onClick={() => onIndex(null)}
               className="rounded-md border border-ink-600 px-3 py-1 hover:border-ink-300"
-              aria-label="Zamknij"
+              aria-label={t("common.close")}
             >
               Esc
             </button>

@@ -12,12 +12,14 @@ import { formatRatio, projectFormat, projectOrientation } from "../../lib/orient
 import { CharacterSheet } from "./CharacterSheet";
 import { KeyRow, SET_LABEL } from "./KeyRow";
 import { dependentShots, isCut } from "../../lib/continuity";
+import { Trans, useT } from "../../i18n";
+import { jobTitle } from "../jobs/jobTitle";
 
 type View = "codex" | "comfy" | "both";
-const VIEWS: { v: View; label: string }[] = [
+const VIEWS: { v: View; label: string | null }[] = [
   { v: "codex", label: "Codex" },
   { v: "comfy", label: "ComfyUI" },
-  { v: "both", label: "Oba" },
+  { v: "both", label: null },
 ];
 type ShotLike = Pick<Shot, "id" | "start" | "end" | "section" | "kind" | "lines" | "cut">;
 type Pending = { kind: "missing" } | { kind: "shot"; id: string } | { kind: "character" } | null;
@@ -28,6 +30,7 @@ export function KeysStep() {
   const orientation = projectOrientation(project);
   const ratio = formatRatio(projectFormat(project));
   const toast = useToast();
+  const t = useT();
   const keysQ = useKeys(id);
   const sbQ = useStoryboard(id, project.stage.storyboard);
   const [view, setView] = useState<View>("both");
@@ -60,7 +63,7 @@ export function KeysStep() {
     const cs = keysQ.data?.character_sheet;
     if (cs) {
       index.set("character", items.length);
-      items.push({ src: cs, caption: "Arkusz postaci" });
+      items.push({ src: cs, caption: t("keys.sheet") });
     }
     for (const s of shots) {
       for (const set of sets) {
@@ -92,11 +95,11 @@ export function KeysStep() {
   };
   const genKeys = useStartJob(id, (shotsToGen: string[] | undefined) =>
     api.codexKeys(id, shotsToGen ? { shots: shotsToGen, force: true } : {}), () => {
-      toast("Codex rysuje klatki…", "info");
+      toast(t("keys.drawingToast"), "info");
       started();
     });
   const genChar = useStartJob(id, (force: boolean) => api.character(id, force), () => {
-    toast("Codex rysuje arkusz postaci…", "info");
+    toast(t("keys.sheetToast"), "info");
     started();
   });
 
@@ -110,7 +113,7 @@ export function KeysStep() {
     if (pending.kind === "character") genChar.mutate(!!keysQ.data?.character_sheet);
   };
 
-  if (keysQ.isPending) return <Loading label="Wczytuję klatki…" />;
+  if (keysQ.isPending) return <Loading label={t("keys.loading")} />;
   if (keysQ.isError) return <ErrorBox error={keysQ.error} onRetry={() => void keysQ.refetch()} />;
 
   const missingCodex = Math.max(0, total - counts.codex);
@@ -119,10 +122,10 @@ export function KeysStep() {
     <div>
       <StepHeader
         index="03"
-        title="Klatki"
+        title={t("step.keys")}
         actions={
           <>
-            <div role="radiogroup" aria-label="Zestaw klatek" className="flex rounded-md border border-ink-600 p-0.5">
+            <div role="radiogroup" aria-label={t("keys.setAria")} className="flex rounded-md border border-ink-600 p-0.5">
               {VIEWS.map(({ v, label }) => (
                 <button
                   key={v}
@@ -132,18 +135,18 @@ export function KeysStep() {
                   onClick={() => setView(v)}
                   className={cx("rounded px-3 py-1.5 text-[0.8rem] transition-colors", view === v ? "bg-ink-100 text-ink-950" : "text-ink-300 hover:text-ink-100")}
                 >
-                  {label}
+                  {label ?? t("keys.both")}
                 </button>
               ))}
             </div>
             <Button variant="primary" busy={!!keysJob || genKeys.isPending} disabled={!sbQ.data || missingCodex === 0} onClick={() => setPending({ kind: "missing" })}
-              title={missingCodex === 0 ? "Wszystkie klatki Codex są gotowe" : undefined}>
-              Wygeneruj brakujące (Codex){missingCodex > 0 ? ` · ${missingCodex}` : ""}
+              title={missingCodex === 0 ? t("keys.allDone") : undefined}>
+              {missingCodex > 0 ? t("keys.genMissingN", { count: missingCodex }) : t("keys.genMissing")}
             </Button>
           </>
         }
       >
-        Jedna klatka kluczowa na ujęcie, w formacie projektu: <b className="text-ink-200">{ratio}</b>.{" "}
+        <Trans k="keys.lead" values={{ ratio: <b className="text-ink-200">{ratio}</b> }} />{" "}
         <Chip tone={total && counts.codex >= total ? "ok" : "neutral"}>Codex {counts.codex}/{total}</Chip>{" "}
         <Chip tone={total && counts.comfy >= total ? "ok" : "neutral"}>ComfyUI {counts.comfy}/{total}</Chip>
       </StepHeader>
@@ -158,19 +161,18 @@ export function KeysStep() {
           onOpen={() => setLbIndex(index.get("character") ?? null)}
         />
         <Hint>
-          Klatki <b>ComfyUI</b> nie powstają tutaj — rysuje je ComfyUI na kartach Vast w trakcie renderu zestawu „comfy” (krok 04). Klatki{" "}
-          <b>Codex</b> generujesz lokalnie przyciskiem powyżej; render zestawu „codex” wymaga kompletu.
+          <Trans k="keys.hint" values={{ comfy: <b>ComfyUI</b>, codex: <b>Codex</b> }} />
         </Hint>
         {keysJob && (
           <div className="rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-3">
             <div className="flex items-center justify-between gap-4 text-sm">
-              <span>{keysJob.title}</span>
+              <span>{jobTitle(keysJob, t)}</span>
               <span className="truncate font-mono text-[0.75rem] text-ink-400">{keysJob.message}</span>
             </div>
             {keysJob.progress && <ProgressBar className="mt-2" value={keysJob.progress.done} total={keysJob.progress.total} />}
           </div>
         )}
-        {!sbQ.data && (!project.stage.storyboard || isNotFound(sbQ.error)) && <Empty title="Brak storyboardu">Klatki powstają z opisów scen — najpierw rozpisz i napisz storyboard (krok 02).</Empty>}
+        {!sbQ.data && (!project.stage.storyboard || isNotFound(sbQ.error)) && <Empty title={t("sb.empty")}>{t("keys.noStoryboardBody")}</Empty>}
         {shots.length > 0 && (
           <ul className="panel px-5">
             {shots.map((s, i) => (
@@ -193,27 +195,26 @@ export function KeysStep() {
 
       <ConfirmDialog
         open={pending !== null}
-        title={pending?.kind === "character" ? "Arkusz postaci" : "Generowanie klatek"}
-        confirmLabel="Generuj"
+        title={pending?.kind === "character" ? t("keys.sheet") : t("keys.genTitle")}
+        confirmLabel={t("keys.genConfirm")}
         busy={genKeys.isPending || genChar.isPending}
         onConfirm={confirm}
         onClose={() => setPending(null)}
       >
-        {pending?.kind === "missing" && <>Codex narysuje {missingCodex} brakujących klatek w formacie {ratio}. To może potrwać kilkanaście minut.</>}
+        {pending?.kind === "missing" && t("keys.genMissingBody", { count: missingCodex, ratio })}
         {pending?.kind === "shot" && (
           <>
-            Codex narysuje od nowa klatkę ujęcia <b>{pending.id}</b> ({ratio}), nadpisując obecną.
+            <Trans k="keys.regenBody" values={{ id: <b>{pending.id}</b>, ratio }} />
             {(deps[pending.id]?.length ?? 0) > 0 && (
               <span className="mt-3 block rounded-lg border border-warn/40 bg-warn/[0.07] px-3 py-2 text-warn">
-                Kolejne ujęcia ciągłe ({deps[pending.id]?.join(", ")}) powstały z tej klatki. Po zmianie mogą przestać do niej pasować —
-                wtedy wygeneruj je ponownie.
+                {t("keys.regenWarn", { ids: deps[pending.id]?.join(", ") ?? "" })}
               </span>
             )}
           </>
         )}
         {pending?.kind === "character" && (keysQ.data.character_sheet
-          ? <>Nowy arkusz zastąpi obecny. Klatki narysowane wcześniej nie zmienią się same.</>
-          : <>Codex narysuje arkusz postaci z okładki i opisu bohaterki.</>)}
+          ? t("keys.sheetReplace")
+          : t("keys.sheetNew"))}
       </ConfirmDialog>
       <Lightbox items={items} index={lbIndex} onIndex={setLbIndex} />
     </div>

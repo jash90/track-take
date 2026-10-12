@@ -1,4 +1,4 @@
-// API contract between the web UI and the sunomv backend (FastAPI, `uv run sunomv serve`, default :8770).
+// API contract between the web UI and the tracktake backend (FastAPI, `uv run tracktake serve`, default :8770).
 // All JSON. File URLs are relative to the backend origin (e.g. "/files/silence/full/codex/keys/s01_landscape.png").
 
 export type KeySet = "codex" | "comfy";
@@ -147,7 +147,8 @@ export interface Job {
   kind: JobKind;
   project: string;
   status: JobStatus;
-  title: string; // human readable, Polish
+  title: string; // English fallback; the UI builds a localised title from kind + params
+  params: Record<string, number | string>; // e.g. {shots: 45} | {missing: 12} | {set: "codex", workers: 2}; may be {} for old jobs
   progress: { done: number; total: number } | null;
   message: string; // last meaningful line
   started: string | null;

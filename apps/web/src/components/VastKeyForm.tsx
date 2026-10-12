@@ -3,18 +3,20 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, qk } from "../api/client";
 import { Button, InlineError } from "./ui";
 import { useToast } from "./Toaster";
+import { useT } from "../i18n";
 
 /** Password field for the Vast.ai API key. The key is sent once and never shown again. */
 export function VastKeyForm({ replacing = false }: { replacing?: boolean }) {
   const [key, setKey] = useState("");
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
   const save = useMutation({
     mutationFn: (k: string) => api.vastKey(k),
     onSuccess: (status) => {
       qc.setQueryData(qk.vast, status);
       setKey("");
-      toast(status.error ? `Klucz zapisany, ale Vast zgłasza: ${status.error}` : "Klucz Vast zapisany", status.error ? "err" : "ok");
+      toast(status.error ? t("vastKey.savedWithError", { error: status.error }) : t("vastKey.saved"), status.error ? "err" : "ok");
     },
   });
   const submit = (e: FormEvent) => {
@@ -25,7 +27,7 @@ export function VastKeyForm({ replacing = false }: { replacing?: boolean }) {
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
       <label className="label" htmlFor="vast-key">
-        {replacing ? "Nowy klucz API Vast.ai" : "Klucz API Vast.ai"}
+        {replacing ? t("vastKey.labelNew") : t("vastKey.label")}
       </label>
       <div className="flex gap-2">
         <input
@@ -34,15 +36,15 @@ export function VastKeyForm({ replacing = false }: { replacing?: boolean }) {
           autoComplete="off"
           spellCheck={false}
           className="field font-mono"
-          placeholder="wklej klucz z console.vast.ai → Account → API Keys"
+          placeholder={t("vastKey.placeholder")}
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
         <Button type="submit" variant="primary" busy={save.isPending} disabled={!key.trim()}>
-          Zapisz
+          {t("common.save")}
         </Button>
       </div>
-      <p className="text-[0.75rem] text-ink-500">Klucz trafia tylko do lokalnego backendu (jak `vastai set api-key`). Interfejs nigdy go nie wyświetla.</p>
+      <p className="text-[0.75rem] text-ink-500">{t("vastKey.note")}</p>
       <InlineError error={save.error} />
     </form>
   );

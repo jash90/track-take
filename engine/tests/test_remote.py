@@ -1,8 +1,8 @@
 import pytest
 
-from sunomv import remote
-from sunomv.shards import split_args, wanted
-from sunomv.vast import State
+from tracktake import remote
+from tracktake.shards import split_args, wanted
+from tracktake.vast import State
 
 SHOTS = [{"id": f"s{i:02d}", "start": i * 5.0, "end": i * 5.0 + (3.0 if i % 3 else 8.0)} for i in range(1, 46)]
 

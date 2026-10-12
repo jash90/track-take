@@ -4,6 +4,7 @@ import { cx } from "../../lib/cx";
 import { formatTime } from "../../lib/format";
 import { kindColor, kindLabel } from "../../lib/kinds";
 import { isCut } from "../../lib/continuity";
+import { useT } from "../../i18n";
 
 export const SECTIONS_H = 26;
 export const SHOTS_H = 58;
@@ -13,6 +14,7 @@ const UNWRITTEN_BG =
   "repeating-linear-gradient(135deg, rgba(237,231,221,0.05) 0 6px, transparent 6px 12px)";
 
 export const SectionsLane = memo(function SectionsLane({ sections, pps }: { sections: Section[]; pps: number }) {
+  const t = useT();
   return (
     <div className="relative" style={{ height: SECTIONS_H }}>
       {sections.map((s, i) => {
@@ -20,7 +22,7 @@ export const SectionsLane = memo(function SectionsLane({ sections, pps }: { sect
         return (
           <div
             key={i}
-            title={`${s.label} · ${kindLabel(s.kind)} · ${formatTime(s.start)}–${formatTime(s.end)}`}
+            title={`${s.label} · ${kindLabel(s.kind, t)} · ${formatTime(s.start)}–${formatTime(s.end)}`}
             className="absolute top-[3px] flex items-center overflow-hidden rounded-[3px] px-2 text-[0.7rem] font-medium text-ink-100/90"
             style={{
               left: s.start * pps + 1,
@@ -48,8 +50,9 @@ interface ShotsLaneProps {
 }
 
 export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary, current, thumbs, onPick }: ShotsLaneProps) {
+  const t = useT();
   return (
-    <div className="relative" style={{ height: SHOTS_H }} role="listbox" aria-label="Ujęcia" aria-multiselectable>
+    <div className="relative" style={{ height: SHOTS_H }} role="listbox" aria-label={t("tl.shotsAria")} aria-multiselectable>
       {shots.map((s, i) => {
         const w = (s.end - s.start) * pps;
         const written = s.scene.trim().length > 0;
@@ -69,7 +72,7 @@ export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary
             aria-selected={isSel}
             tabIndex={s.id === primary ? 0 : -1}
             data-shot={s.id}
-            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? "cięcie" : "ciągłe (kontynuacja poprzedniego)"}${written ? "" : " · nieopisane"}`}
+            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? t("tl.cut") : t("tl.continuous")}${written ? "" : ` · ${t("tl.unwritten")}`}`}
             onClick={(e) => {
               e.stopPropagation();
               onPick(s.id, e.metaKey || e.ctrlKey || e.shiftKey);

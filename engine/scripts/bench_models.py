@@ -9,8 +9,8 @@ import argparse
 import json
 from pathlib import Path
 
-from sunomv.comfy.client import ComfyClient
-from sunomv.comfy.graphs import qwen_edit, zimage
+from tracktake.comfy.client import ComfyClient
+from tracktake.comfy.graphs import qwen_edit, zimage
 
 STYLE = (
     "paper cut-out stop-motion animation, layered construction paper, visible paper texture and soft shadows "
@@ -29,7 +29,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     c = ComfyClient()
-    cover = c.upload_image(args.cover, "sunomv_cover.jpg")
+    cover = c.upload_image(args.cover, "tracktake_cover.jpg")
     runs: list[tuple[str, dict]] = []
     if args.only in (None, "zimage"):
         runs += [

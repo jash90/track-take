@@ -18,14 +18,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sunomv.config import REPO_ROOT, VastSettings
-from sunomv.vast import State, ssh_base
+from tracktake.config import REPO_ROOT, VastSettings
+from tracktake.vast import State, ssh_base
 
-REMOTE = "/workspace/sunomv"
+REMOTE = "/workspace/tracktake"
 PROJECT = f"{REMOTE}/project"
 FULL = f"{PROJECT}/full"
 LOCAL_COMFY = "http://127.0.0.1:18188"
-PY = f"{REMOTE}/py"  # wrapper written by sunomv_runtime.sh: the ComfyUI venv interpreter
+PY = f"{REMOTE}/py"  # wrapper written by tracktake_runtime.sh: the ComfyUI venv interpreter
 FORMAT_OF = {"landscape": "16x9", "portrait": "9x16"}
 ORIENTS = ("landscape", "portrait")
 Log = Callable[[str], None]
@@ -133,8 +133,8 @@ def prepare(state: State, s: VastSettings, full: Path, kind: str, song: Path, an
     """Code, runtime (ffmpeg, fonts, python deps) and project inputs on one worker."""
     push(state, s, [REPO_ROOT / "engine" / "src", REPO_ROOT / "engine" / "scripts"], f"{REMOTE}/engine",
          excludes=("__pycache__", "*.pyc"))
-    push(state, s, [REPO_ROOT / "config" / "sunomv.toml"], f"{REMOTE}/config")
-    with (REPO_ROOT / "comfy" / "provisioning" / "sunomv_runtime.sh").open("rb") as script:
+    push(state, s, [REPO_ROOT / "config" / "tracktake.toml"], f"{REMOTE}/config")
+    with (REPO_ROOT / "comfy" / "provisioning" / "tracktake_runtime.sh").open("rb") as script:
         out = ssh(state, s, f"bash -s -- {REMOTE} {'analysis' if with_analysis else ''}", stdin=script, timeout=1800)
     if "RUNTIME_OK" not in out:
         raise RuntimeError(f"{state.name}: runtime setup did not finish: {out[-400:]}")
@@ -201,10 +201,10 @@ def gather(leader: State, followers: list[State], s: VastSettings, kind: str, lo
         return
     clip_dir = f"{FULL}/{kind}/clips"
     for f in followers:
-        pub = ssh(f, s, "test -f ~/.ssh/sunomv_gather || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/sunomv_gather; "
-                        "cat ~/.ssh/sunomv_gather.pub").strip().splitlines()[-1]
+        pub = ssh(f, s, "test -f ~/.ssh/tracktake_gather || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/tracktake_gather; "
+                        "cat ~/.ssh/tracktake_gather.pub").strip().splitlines()[-1]
         ssh(leader, s, authorize_key_command(pub))
-        rsh = (f"ssh -i ~/.ssh/sunomv_gather -p {leader.ssh_port} -o StrictHostKeyChecking=accept-new "
+        rsh = (f"ssh -i ~/.ssh/tracktake_gather -p {leader.ssh_port} -o StrictHostKeyChecking=accept-new "
                "-o ConnectTimeout=20")
         t0 = time.monotonic()
         ssh(f, s, f"rsync -az -e {shlex.quote(rsh)} {clip_dir}/ root@{leader.ssh_host}:{clip_dir}/", timeout=3600)
@@ -307,14 +307,14 @@ def run_analysis(worker: State, s: VastSettings, song: Path, lyrics: Path | None
     t0 = time.monotonic()
     push(worker, s, [REPO_ROOT / "engine" / "src", REPO_ROOT / "engine" / "scripts"], f"{REMOTE}/engine",
          excludes=("__pycache__", "*.pyc"))
-    with (REPO_ROOT / "comfy" / "provisioning" / "sunomv_runtime.sh").open("rb") as script:
+    with (REPO_ROOT / "comfy" / "provisioning" / "tracktake_runtime.sh").open("rb") as script:
         out = ssh(worker, s, f"bash -s -- {REMOTE} analysis", stdin=script, timeout=2400)
     if "RUNTIME_OK" not in out:
         raise RuntimeError(f"{worker.name}: runtime setup did not finish: {out[-400:]}")
     push(worker, s, [song, *([lyrics] if lyrics else [])], PROJECT)
     log(f"{worker.name}: ready for analysis in {time.monotonic() - t0:.0f}s")
     lyr = f" --lyrics {PROJECT}/{lyrics.name}" if lyrics else ""
-    pid = start(worker, s, "analyze", f"{PY} -m sunomv.cli analyze {PROJECT}/{song.name}{lyr} "
+    pid = start(worker, s, "analyze", f"{PY} -m tracktake.cli analyze {PROJECT}/{song.name}{lyr} "
                                       f"--out {PROJECT}/work --language {language} --align-backend torch")
     while alive(worker, s, pid):
         time.sleep(poll)

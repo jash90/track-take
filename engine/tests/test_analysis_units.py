@@ -5,11 +5,11 @@ import itertools
 import numpy as np
 import pytest
 
-from sunomv.analysis.beats import beats_per_bar_of, bpm_of, regularize_downbeats
-from sunomv.analysis.features import HOP, SR, normalise, pool_to_frames
-from sunomv.analysis.sections import build_sections, raw_boundaries, snap_boundaries
-from sunomv.lyrics import parse_lyrics
-from sunomv.models import LyricLine, Word
+from tracktake.analysis.beats import beats_per_bar_of, bpm_of, regularize_downbeats
+from tracktake.analysis.features import HOP, SR, normalise, pool_to_frames
+from tracktake.analysis.sections import build_sections, raw_boundaries, snap_boundaries
+from tracktake.lyrics import parse_lyrics
+from tracktake.models import LyricLine, Word
 
 
 def _line(text: str, start: float, end: float) -> LyricLine:

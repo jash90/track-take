@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { errorMessage } from "../lib/format";
+import { useT } from "../i18n";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
@@ -56,10 +57,11 @@ export function Button({
 }
 
 export function Spinner({ small = false, className }: { small?: boolean; className?: string }) {
+  const t = useT();
   return (
     <span
       role="status"
-      aria-label="Ładowanie"
+      aria-label={t("common.loadingAria")}
       className={cx(
         "inline-block animate-spin rounded-full border-2 border-current border-r-transparent opacity-80",
         small ? "h-3.5 w-3.5" : "h-5 w-5",
@@ -69,23 +71,25 @@ export function Spinner({ small = false, className }: { small?: boolean; classNa
   );
 }
 
-export function Loading({ label = "Ładowanie…" }: { label?: string }) {
+export function Loading({ label }: { label?: string }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-3 px-1 py-8 text-ink-400">
       <Spinner />
-      <span className="text-sm">{label}</span>
+      <span className="text-sm">{label ?? t("common.loading")}</span>
     </div>
   );
 }
 
-export function ErrorBox({ error, title = "Coś poszło nie tak", onRetry }: { error: unknown; title?: string; onRetry?: () => void }) {
+export function ErrorBox({ error, title, onRetry }: { error: unknown; title?: string; onRetry?: () => void }) {
+  const t = useT();
   return (
     <div role="alert" className="rounded-lg border border-err/40 bg-err/[0.07] px-4 py-3 text-sm">
-      <div className="font-semibold text-err">{title}</div>
+      <div className="font-semibold text-err">{title ?? t("common.error")}</div>
       <div className="mt-1 break-words font-mono text-[0.78rem] text-ink-200">{errorMessage(error)}</div>
       {onRetry && (
         <Button size="sm" variant="ghost" className="mt-2 -ml-2" onClick={onRetry}>
-          Spróbuj ponownie
+          {t("common.retry")}
         </Button>
       )}
     </div>
@@ -153,10 +157,11 @@ export function ProgressBar({ value, total, className }: { value: number; total:
 }
 
 export function StepHeader({ index, title, children, actions }: { index: string; title: string; children?: ReactNode; actions?: ReactNode }) {
+  const t = useT();
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-ink-700 pb-5">
       <div className="min-w-0">
-        <div className="eyebrow">Krok {index}</div>
+        <div className="eyebrow">{t("common.step", { n: index })}</div>
         <h1 className="mt-1 font-display text-[2.6rem] leading-none text-ink-100">{title}</h1>
         {children && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-400">{children}</p>}
       </div>

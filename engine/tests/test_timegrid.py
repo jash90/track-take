@@ -1,6 +1,6 @@
 import pytest
 
-from sunomv.timegrid import between, frame_at, frames_of, nearest, snap, subdivide
+from tracktake.timegrid import between, frame_at, frames_of, nearest, snap, subdivide
 
 
 @pytest.mark.parametrize("bpm", [90, 120, 128, 174])

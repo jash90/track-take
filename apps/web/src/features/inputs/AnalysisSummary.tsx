@@ -3,10 +3,12 @@ import { useAnalysis } from "../../api/hooks";
 import { ErrorBox, Loading } from "../../components/ui";
 import { formatTime } from "../../lib/format";
 import { kindColor, kindLabel } from "../../lib/kinds";
+import { useT } from "../../i18n";
 
 export function AnalysisSummary({ projectId }: { projectId: string }) {
   const { data, isPending, error, refetch } = useAnalysis(projectId);
-  if (isPending) return <Loading label="Wczytuję analizę…" />;
+  const t = useT();
+  if (isPending) return <Loading label={t("analysis.loading")} />;
   if (error || !data) {
     if (isNotFound(error)) return null;
     return <ErrorBox error={error} onRetry={() => void refetch()} />;
@@ -16,24 +18,24 @@ export function AnalysisSummary({ projectId }: { projectId: string }) {
     <section className="panel animate-rise p-6">
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
         <div>
-          <div className="eyebrow">Tempo</div>
+          <div className="eyebrow">{t("analysis.tempo")}</div>
           <div className="font-display text-5xl leading-none tabular">
             {data.bpm.toFixed(1)} <span className="font-sans text-base text-ink-400">BPM</span>
           </div>
         </div>
         <div>
-          <div className="eyebrow">Długość</div>
+          <div className="eyebrow">{t("analysis.duration")}</div>
           <div className="font-display text-5xl leading-none tabular">{formatTime(data.duration)}</div>
         </div>
         <div className="flex gap-8 pb-1 font-mono text-[0.78rem] text-ink-300">
           <span>
-            <span className="text-ink-100">{data.downbeats.length}</span> taktów
+            <span className="text-ink-100">{data.downbeats.length}</span> {t("analysis.bars", { count: data.downbeats.length })}
           </span>
           <span>
-            <span className="text-ink-100">{data.beats.length}</span> bitów
+            <span className="text-ink-100">{data.beats.length}</span> {t("analysis.beats", { count: data.beats.length })}
           </span>
           <span>
-            <span className="text-ink-100">{data.lines.length}</span> linijek tekstu
+            <span className="text-ink-100">{data.lines.length}</span> {t("analysis.lines", { count: data.lines.length })}
           </span>
         </div>
       </div>
@@ -53,7 +55,7 @@ export function AnalysisSummary({ projectId }: { projectId: string }) {
         {data.sections.map((s, i) => (
           <li key={i} className="flex items-center gap-2.5 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: kindColor(s.kind) }} />
-            <span className="truncate text-ink-100" title={`${s.label} · ${kindLabel(s.kind)}`}>{s.label}</span>
+            <span className="truncate text-ink-100" title={`${s.label} · ${kindLabel(s.kind, t)}`}>{s.label}</span>
             <span className="ml-auto whitespace-nowrap font-mono text-[0.72rem] text-ink-400 tabular">
               {formatTime(s.start)}–{formatTime(s.end)}
             </span>

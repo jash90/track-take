@@ -12,12 +12,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from sunomv.models import LyricLine, Word
-from sunomv.render.captions import line_at, overlay, render_caption
-from sunomv.render.compositor import LANDSCAPE, PORTRAIT, Camera, Layer, Shot, compose, to_rgba
-from sunomv.render.encode import VideoWriter
-from sunomv.render.stepping import active_drawing, drawing_frames, pulse_track
-from sunomv.timegrid import frames_of
+from tracktake.models import LyricLine, Word
+from tracktake.render.captions import line_at, overlay, render_caption
+from tracktake.render.compositor import LANDSCAPE, PORTRAIT, Camera, Layer, Shot, compose, to_rgba
+from tracktake.render.encode import VideoWriter
+from tracktake.render.stepping import active_drawing, drawing_frames, pulse_track
+from tracktake.timegrid import frames_of
 
 FPS = 24
 SECONDS = 6.0

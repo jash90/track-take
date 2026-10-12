@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON the Vast.ai instance (piped over ssh by `sunomv vast up`).
+# Runs ON the Vast.ai instance (piped over ssh by `tracktake vast up`).
 # Installs ComfyUI pinned to the local commit, downloads the model sets, starts ComfyUI on 127.0.0.1:PORT.
 # Usage: bash -s -- <comfy_repo> <commit> <port> <model_set>...
 set -euo pipefail

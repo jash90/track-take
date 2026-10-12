@@ -1,6 +1,6 @@
 import type { Storyboard } from "../../api/types";
 import { Button } from "../../components/ui";
-import { plural } from "../../lib/format";
+import { useT } from "../../i18n";
 
 interface Props {
   draft: Storyboard;
@@ -15,15 +15,16 @@ interface Props {
 
 /** Global storyboard fields + instructions for the Claude director. */
 export function DirectorPanel({ draft, disabled, instructions, onInstructions, onChange, selectedCount, busy, onRewrite }: Props) {
+  const t = useT();
   return (
     <aside className="flex flex-col gap-5">
       <section className="panel flex flex-col gap-4 p-5">
         <div>
-          <div className="eyebrow">Biblia stylu</div>
-          <div className="mt-0.5 font-display text-2xl">Cały teledysk</div>
+          <div className="eyebrow">{t("director.bible")}</div>
+          <div className="mt-0.5 font-display text-2xl">{t("director.wholeVideo")}</div>
         </div>
         <div>
-          <label className="label" htmlFor="sb-style">Styl</label>
+          <label className="label" htmlFor="sb-style">{t("director.style")}</label>
           <textarea
             id="sb-style"
             rows={4}
@@ -34,7 +35,7 @@ export function DirectorPanel({ draft, disabled, instructions, onInstructions, o
           />
         </div>
         <div>
-          <label className="label" htmlFor="sb-heroine">Bohaterka — opis w każdym prompcie</label>
+          <label className="label" htmlFor="sb-heroine">{t("director.heroine")}</label>
           <textarea
             id="sb-heroine"
             rows={5}
@@ -48,15 +49,15 @@ export function DirectorPanel({ draft, disabled, instructions, onInstructions, o
 
       <section className="panel flex flex-col gap-3 p-5">
         <div>
-          <div className="eyebrow">Reżyser · Claude</div>
-          <div className="mt-0.5 font-display text-2xl">Uwagi do sceny</div>
+          <div className="eyebrow">{t("director.eyebrow")}</div>
+          <div className="mt-0.5 font-display text-2xl">{t("director.notes")}</div>
         </div>
-        <label className="label sr-only" htmlFor="sb-instr">Instrukcje dla reżysera</label>
+        <label className="label sr-only" htmlFor="sb-instr">{t("director.instrLabel")}</label>
         <textarea
           id="sb-instr"
           rows={3}
           className="field resize-y text-[0.85rem] leading-relaxed"
-          placeholder="opcjonalnie, np. „w refrenach więcej deszczu i neonów, w bridge’u zbliżenia twarzy”"
+          placeholder={t("director.instrPlaceholder")}
           value={instructions}
           onChange={(e) => onInstructions(e.target.value)}
         />
@@ -65,12 +66,12 @@ export function DirectorPanel({ draft, disabled, instructions, onInstructions, o
           disabled={selectedCount === 0 || disabled}
           busy={busy}
           onClick={onRewrite}
-          title={selectedCount === 0 ? "Zaznacz ujęcia na osi czasu (⌘/Shift+klik dla wielu)" : undefined}
+          title={selectedCount === 0 ? t("director.selectHint") : undefined}
         >
-          Przepisz zaznaczone{selectedCount > 0 ? ` (${selectedCount} ${plural(selectedCount, "ujęcie", "ujęcia", "ujęć")})` : ""}
+          {selectedCount > 0 ? t("director.rewriteN", { count: selectedCount }) : t("director.rewrite")}
         </Button>
         <p className="text-[0.72rem] leading-relaxed text-ink-500">
-          ⌘/Ctrl/Shift + klik na osi zaznacza kilka ujęć. Instrukcje działają też dla „Napisz storyboard”.
+          {t("director.multiHint")}
         </p>
       </section>
     </aside>

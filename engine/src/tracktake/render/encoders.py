@@ -1,6 +1,6 @@
 """Pick the video encoder for this machine: VideoToolbox on a Mac, NVENC on an NVIDIA box (Vast), else x264/x265.
 
-SUNOMV_ENCODER=videotoolbox|nvenc|cpu forces a family (e.g. cpu when a host's NVENC sessions are exhausted).
+TRACKTAKE_ENCODER=videotoolbox|nvenc|cpu forces a family (e.g. cpu when a host's NVENC sessions are exhausted).
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ def _available() -> frozenset[str]:
 
 
 def family() -> str:
-    forced = os.environ.get("SUNOMV_ENCODER")
+    forced = os.environ.get("TRACKTAKE_ENCODER")
     if forced:
         if forced not in FAMILIES:
-            raise ValueError(f"SUNOMV_ENCODER must be one of {sorted(FAMILIES)}")
+            raise ValueError(f"TRACKTAKE_ENCODER must be one of {sorted(FAMILIES)}")
         return forced
     have = _available()
     if platform.system() == "Darwin" and "h264_videotoolbox" in have:

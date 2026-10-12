@@ -1,3 +1,4 @@
+import type { Key, TFn } from "../i18n";
 /** Muted, filmic colours per section kind (intro|verse|pre_chorus|chorus|build|break|bridge|breakdown|outro|other). */
 const KIND_COLORS: Record<string, string> = {
   intro: "#56687a",
@@ -12,23 +13,12 @@ const KIND_COLORS: Record<string, string> = {
   other: "#5a534c",
 };
 
-const KIND_LABELS: Record<string, string> = {
-  intro: "Intro",
-  verse: "Zwrotka",
-  pre_chorus: "Przedrefren",
-  chorus: "Refren",
-  build: "Narastanie",
-  break: "Przerwa",
-  bridge: "Bridge",
-  breakdown: "Breakdown",
-  outro: "Outro",
-  other: "Inne",
-};
+const KNOWN = new Set(["intro", "verse", "pre_chorus", "chorus", "build", "break", "bridge", "breakdown", "outro", "other"]);
 
 export function kindColor(kind: string): string {
   return KIND_COLORS[kind] ?? KIND_COLORS.other ?? "#5a534c";
 }
 
-export function kindLabel(kind: string): string {
-  return KIND_LABELS[kind] ?? kind;
+export function kindLabel(kind: string, t: TFn): string {
+  return KNOWN.has(kind) ? t(`kind.${kind}` as Key) : kind;
 }

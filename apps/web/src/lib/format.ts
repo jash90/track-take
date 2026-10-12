@@ -1,3 +1,5 @@
+import { getLocale } from "../i18n/core";
+
 /** 83.4 -> "1:23.4" (tenths optional). */
 export function formatTime(seconds: number, tenths = false): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
@@ -31,14 +33,14 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString(getLocale(), { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function formatClock(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return d.toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 export function elapsed(from: string | null, to: string | null): string {
@@ -56,13 +58,4 @@ export function elapsed(from: string | null, to: string | null): string {
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
-}
-
-/** Polish plural: 1 ujęcie, 2 ujęcia, 5 ujęć. */
-export function plural(n: number, one: string, few: string, many: string): string {
-  if (n === 1) return one;
-  const d = n % 10;
-  const dd = n % 100;
-  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return few;
-  return many;
 }

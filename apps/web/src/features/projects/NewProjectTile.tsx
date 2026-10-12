@@ -6,12 +6,14 @@ import type { Orientation } from "../../api/types";
 import { Button, InlineError } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { ORIENTATIONS } from "../../lib/orientation";
+import { useT } from "../../i18n";
 
 export function NewProjectTile() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [orientation, setOrientation] = useState<Orientation | null>(null);
   const qc = useQueryClient();
+  const t = useT();
   const navigate = useNavigate();
   const create = useMutation({
     mutationFn: (payload: { name: string; orientation: Orientation }) => api.createProject(payload),
@@ -41,8 +43,8 @@ export function NewProjectTile() {
         <span className="grid h-14 w-14 place-items-center rounded-full border border-ink-600 text-3xl font-light transition-colors group-hover:border-safe group-hover:text-safe">
           +
         </span>
-        <span className="font-display text-2xl italic">Nowy projekt</span>
-        <span className="text-xs text-ink-500">utwór z Suno → teledysk</span>
+        <span className="font-display text-2xl italic">{t("newProject.tile")}</span>
+        <span className="text-xs text-ink-500">{t("newProject.tileHint")}</span>
       </button>
     );
   }
@@ -56,20 +58,20 @@ export function NewProjectTile() {
       className="flex min-h-full flex-col gap-4 rounded-xl border border-safe/50 bg-ink-850 p-5 sm:col-span-2"
     >
       <div>
-        <div className="eyebrow">Nowy projekt</div>
-        <div className="mt-1 font-display text-2xl italic">Jak się nazywa utwór?</div>
+        <div className="eyebrow">{t("newProject.tile")}</div>
+        <div className="mt-1 font-display text-2xl italic">{t("newProject.question")}</div>
       </div>
       <input
         autoFocus
         className="field"
-        placeholder="np. Silence"
-        aria-label="Nazwa projektu"
+        placeholder={t("newProject.placeholder")}
+        aria-label={t("newProject.nameAria")}
         value={name}
         maxLength={80}
         onChange={(e) => setName(e.target.value)}
       />
       <fieldset>
-        <legend className="label">Format teledysku — jeden na projekt</legend>
+        <legend className="label">{t("newProject.formatLegend")}</legend>
         <div role="radiogroup" aria-required className="grid grid-cols-2 gap-3">
           {ORIENTATIONS.map((o) => {
             const on = orientation === o.value;
@@ -96,23 +98,23 @@ export function NewProjectTile() {
                 </span>
                 <span className="flex min-w-0 flex-col">
                   <span className="font-display text-[1.45rem] leading-tight">
-                    {o.label} <span className="font-mono text-[0.85rem] text-ink-300">{o.ratio}</span>
+                    {t(o.label)} <span className="font-mono text-[0.85rem] text-ink-300">{o.ratio}</span>
                   </span>
-                  <span className="text-[0.75rem] text-ink-400">{o.hint}</span>
+                  <span className="text-[0.75rem] text-ink-400">{t(o.hint)}</span>
                 </span>
               </button>
             );
           })}
         </div>
-        {orientation === null && <p className="mt-2 text-[0.72rem] text-ink-500">Wybierz format — klatki i wideo powstają tylko w nim.</p>}
+        {orientation === null && <p className="mt-2 text-[0.72rem] text-ink-500">{t("newProject.pickFormat")}</p>}
       </fieldset>
       <InlineError error={create.error} />
       <div className="mt-auto flex gap-2">
         <Button type="submit" variant="primary" busy={create.isPending} disabled={!ready}>
-          Utwórz
+          {t("newProject.create")}
         </Button>
         <Button variant="ghost" onClick={close}>
-          Anuluj
+          {t("common.cancel")}
         </Button>
       </div>
     </form>

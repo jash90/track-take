@@ -6,14 +6,15 @@ import { formatTime } from "../../lib/format";
 import { TimelineCanvas, RULER_H, WAVE_H } from "./TimelineCanvas";
 import { LyricsLane, LYRICS_H, SectionsLane, SECTIONS_H, ShotsLane, SHOTS_H } from "./TimelineLanes";
 import type { Transport } from "./useAudioTransport";
+import { Trans, useT, type Key } from "../../i18n";
 
 const MAX_PPS = 420;
-const LANES = [
-  { label: "czas", h: RULER_H },
-  { label: "audio", h: WAVE_H },
-  { label: "sekcje", h: SECTIONS_H },
-  { label: "ujęcia", h: SHOTS_H },
-  { label: "tekst", h: LYRICS_H },
+const LANES: { label: Key; h: number }[] = [
+  { label: "tl.lane.time", h: RULER_H },
+  { label: "tl.lane.audio", h: WAVE_H },
+  { label: "tl.lane.sections", h: SECTIONS_H },
+  { label: "tl.lane.shots", h: SHOTS_H },
+  { label: "tl.lane.lyrics", h: LYRICS_H },
 ];
 
 interface TimelineProps {
@@ -33,6 +34,7 @@ const indexAt = <T extends { start: number; end: number }>(items: T[], t: number
 
 export function Timeline({ duration, peaks, analysis, shots, selected, primary, onPick, thumbs, transport }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
+  const t = useT();
   const inner = useRef<HTMLDivElement>(null);
   const playhead = useRef<HTMLDivElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
@@ -151,8 +153,8 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
   };
 
   const section = analysis?.sections.find((s) => {
-    const t = shots[curShot]?.start ?? -1;
-    return t >= s.start && t < s.end;
+    const at = shots[curShot]?.start ?? -1;
+    return at >= s.start && at < s.end;
   });
   const totalH = LANES.reduce((a, l) => a + l.h, 0);
 
@@ -164,7 +166,7 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
           type="button"
           onClick={transport.toggle}
           disabled={!transport.ready}
-          aria-label={transport.playing ? "Pauza" : "Odtwórz"}
+          aria-label={transport.playing ? t("tl.pause") : t("tl.play")}
           className={cx(
             "grid h-9 w-9 place-items-center rounded-full transition-colors disabled:opacity-40",
             transport.playing ? "bg-safe text-ink-950" : "bg-ink-100 text-ink-950 hover:bg-white",
@@ -187,26 +189,26 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
         <div className="ml-auto flex items-center gap-1.5 text-[0.72rem] text-ink-400">
           {analysis && <span className="mr-2 font-mono">{analysis.bpm.toFixed(0)} BPM</span>}
           <span className="mr-2 hidden xl:inline">
-            <Kbd>spacja</Kbd> odtwórz · <Kbd>←</Kbd><Kbd>→</Kbd> ujęcia · <Kbd>⌘</Kbd>+kółko zoom
+            <Trans k="tl.shortcuts" values={{ space: <Kbd>{t("tl.space")}</Kbd>, arrows: <><Kbd>←</Kbd><Kbd>→</Kbd></>, cmd: <Kbd>⌘</Kbd> }} />
           </span>
           <label className="mr-2 flex items-center gap-1.5">
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-[#ff5a3c]" />
-            śledź
+            {t("tl.follow")}
           </label>
-          <button type="button" onClick={() => zoomTo(zoom / 1.6)} disabled={zoom <= 1} aria-label="Oddal" className="h-7 w-7 rounded border border-ink-600 hover:border-ink-400 disabled:opacity-40">−</button>
-          <button type="button" onClick={() => zoomTo(1)} className="h-7 rounded border border-ink-600 px-2 font-mono hover:border-ink-400" title="Dopasuj do szerokości">
+          <button type="button" onClick={() => zoomTo(zoom / 1.6)} disabled={zoom <= 1} aria-label={t("tl.zoomOut")} className="h-7 w-7 rounded border border-ink-600 hover:border-ink-400 disabled:opacity-40">−</button>
+          <button type="button" onClick={() => zoomTo(1)} className="h-7 rounded border border-ink-600 px-2 font-mono hover:border-ink-400" title={t("tl.fit")}>
             {Math.round(Math.min(zoom, maxZoom) * 100)}%
           </button>
-          <button type="button" onClick={() => zoomTo(zoom * 1.6)} disabled={zoom >= maxZoom} aria-label="Przybliż" className="h-7 w-7 rounded border border-ink-600 hover:border-ink-400 disabled:opacity-40">+</button>
+          <button type="button" onClick={() => zoomTo(zoom * 1.6)} disabled={zoom >= maxZoom} aria-label={t("tl.zoomIn")} className="h-7 w-7 rounded border border-ink-600 hover:border-ink-400 disabled:opacity-40">+</button>
         </div>
       </div>
 
       <div className="flex">
         {/* lane labels */}
-        <div className="w-[58px] shrink-0 border-r border-ink-700 bg-ink-900" aria-hidden>
+        <div className="w-[66px] shrink-0 border-r border-ink-700 bg-ink-900" aria-hidden>
           {LANES.map((l) => (
-            <div key={l.label} style={{ height: l.h }} className="flex items-center px-2 font-mono text-[0.6rem] uppercase tracking-wider text-ink-500">
-              {l.label}
+            <div key={l.label} style={{ height: l.h }} className="flex items-center px-2 font-mono text-[0.6rem] uppercase tracking-wide text-ink-500">
+              {t(l.label)}
             </div>
           ))}
         </div>

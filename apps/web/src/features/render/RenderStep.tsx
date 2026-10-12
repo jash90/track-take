@@ -13,15 +13,17 @@ import { FormatBadge, formatRatio, orientationInfo, projectFormat, projectOrient
 import { EstimatePanel } from "./EstimatePanel";
 import { RenderJobPanel } from "./RenderJobPanel";
 import { VastPanel } from "./VastPanel";
+import { Trans, useT, type Key } from "../../i18n";
 
-const SETS: { v: KeySet; label: string; note: string }[] = [
-  { v: "codex", label: "Codex", note: "gotowe klatki z kroku 03" },
-  { v: "comfy", label: "ComfyUI", note: "klatki rysowane na Vast" },
+const SETS: { v: KeySet; label: string; note: Key }[] = [
+  { v: "codex", label: "Codex", note: "render.set.codexNote" },
+  { v: "comfy", label: "ComfyUI", note: "render.set.comfyNote" },
 ];
 
 export function RenderStep() {
   const { project, jobs, openJobs } = useWorkspace();
   const toast = useToast();
+  const t = useT();
   const vast = useVast();
   const orientation = projectOrientation(project);
   const ratio = formatRatio(projectFormat(project));
@@ -54,44 +56,45 @@ export function RenderStep() {
       }),
     () => {
       setConfirm(false);
-      toast("Render ruszył — wynajmuję karty na Vast", "info");
+      toast(t("render.startedToast"), "info");
       openJobs();
     },
   );
 
   const disabledReason = !configured
-    ? "Najpierw dodaj klucz Vast"
+    ? t("render.needKey")
     : running
-      ? "Render już trwa"
+      ? t("render.alreadyRunning")
       : blockedByKeys
-        ? "Brakuje klatek Codex"
+        ? t("render.missingKeys")
         : !e || w !== workers || e.workers !== workers
-          ? "Czekam na wycenę"
+          ? t("render.waitingEstimate")
           : undefined;
 
   return (
     <div>
       <StepHeader
         index="04"
-        title="Wideo"
+        title={t("step.video")}
         actions={
           <>
           <FormatBadge orientation={orientation} />
           <Button variant="primary" disabled={!!disabledReason} title={disabledReason} busy={render.isPending} onClick={() => setConfirm(true)}>
-            Renderuj na Vast{e ? ` · ~${formatUsd(e.usd)}` : ""}
+            {e ? t("render.buttonCost", { usd: formatUsd(e.usd) }) : t("render.button")}
           </Button>
           </>
         }
       >
-        Renderujemy jeden format — {orientationInfo(orientation).label.toLowerCase()} <b className="text-ink-200">{ratio}</b>. Klipy i cały
-        teledysk (podgląd + master) powstają na wynajętych kartach Vast.ai — Mac pobiera tylko gotowe pliki, a karty zwalniają się same.
+        <Trans
+          k="render.lead"
+          values={{ format: <>{t(orientationInfo(orientation).label).toLowerCase()} <b className="text-ink-200">{ratio}</b></> }}
+        />
       </StepHeader>
       <InlineError error={render.error} />
 
       {configured && lowBalance && (
         <div role="alert" className="mb-6 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
-          Saldo Vast ({formatUsd(balance)}) jest niższe niż szacowany koszt renderu ({formatUsd(e?.usd)}). Doładuj konto na console.vast.ai,
-          inaczej karty mogą zostać zatrzymane w trakcie.
+          {t("render.lowBalance", { balance: formatUsd(balance), usd: formatUsd(e?.usd) })}
         </div>
       )}
       {lastRender && <div className="mb-6"><RenderJobPanel job={lastRender} projectId={project.id} /></div>}
@@ -100,7 +103,7 @@ export function RenderStep() {
         <section className="panel flex flex-col gap-6 p-5">
           <div className="grid gap-5 md:grid-cols-2">
             <div>
-              <div className="label" id="set-label">Zestaw klatek</div>
+              <div className="label" id="set-label">{t("render.setLabel")}</div>
               <div role="radiogroup" aria-labelledby="set-label" className="grid grid-cols-2 gap-2">
                 {SETS.map((s) => (
                   <button
@@ -115,14 +118,14 @@ export function RenderStep() {
                     )}
                   >
                     <div className="font-display text-xl">{s.label}</div>
-                    <div className="text-[0.72rem] text-ink-400">{s.note}</div>
+                    <div className="text-[0.72rem] text-ink-400">{t(s.note)}</div>
                   </button>
                 ))}
               </div>
             </div>
             <div>
               <label className="label" htmlFor="workers">
-                Karty równolegle: <span className="font-mono text-ink-100">{workers}</span>
+                <Trans k="render.workers" values={{ n: <span className="font-mono text-ink-100">{workers}</span> }} />
               </label>
               <input id="workers" type="range" min={1} max={8} step={1} value={workers} onChange={(ev) => setWorkers(Number(ev.target.value))} className="slider mt-3 w-full" />
               <div className="mt-1 flex justify-between font-mono text-[0.62rem] text-ink-500">
@@ -136,14 +139,13 @@ export function RenderStep() {
               <input id="gpu" className="field font-mono" value={gpu} onChange={(ev) => setGpu(ev.target.value)} />
             </div>
             <div>
-              <label className="label" htmlFor="dph">Maks. $/h za kartę</label>
+              <label className="label" htmlFor="dph">{t("render.maxDph")}</label>
               <input id="dph" type="number" min={0.05} step={0.05} className="field font-mono" value={maxDph} onChange={(ev) => setMaxDph(Number(ev.target.value))} />
             </div>
           </div>
           <EstimatePanel estimate={e} loading={est.isFetching} error={est.error} ready={project.stage.shots > 0} />
           <Hint>
-            Więcej kart = krócej, ale każda pobiera ~{e?.models_gb ?? "40"} GB modeli, więc koszt rośnie wolniej niż czas spada. Wycena dotyczy
-            GPU i ustawień z tego formularza; pokazane oferty to aktualne ceny Vast.
+            {t("render.hint", { gb: e?.models_gb ?? 40 })}
           </Hint>
         </section>
         <VastPanel />
@@ -151,8 +153,8 @@ export function RenderStep() {
 
       <ConfirmDialog
         open={confirm}
-        title="Wynająć karty na Vast?"
-        confirmLabel={e ? `Renderuj za ~${formatUsd(e.usd)}` : "Renderuj"}
+        title={t("render.confirmTitle")}
+        confirmLabel={e ? t("render.confirmCost", { usd: formatUsd(e.usd) }) : t("render.confirm")}
         busy={render.isPending}
         onConfirm={() => render.mutate(undefined)}
         onClose={() => setConfirm(false)}
@@ -160,20 +162,19 @@ export function RenderStep() {
         {e && (
           <div className="flex flex-col gap-3">
             <p>
-              Szacowany koszt: <b className="font-display text-3xl text-safe-hi">{formatUsd(e.usd)}</b>
+              <Trans k="render.estCost" values={{ usd: <b className="font-display text-3xl text-safe-hi">{formatUsd(e.usd)}</b> }} />
             </p>
             <ul className="font-mono text-[0.78rem] text-ink-300">
-              <li>format: {ratio} · zestaw: {set === "codex" ? "Codex" : "ComfyUI"} · {e.clips} klipów</li>
-              <li>karty: {workers} × {gpu} (maks. {formatUsd(maxDph)}/h)</li>
-              <li>czas: ~{formatMinutes(e.minutes)} · modele {e.models_gb} GB na kartę</li>
+              <li>{t("render.lineFormat", { ratio, set: set === "codex" ? "Codex" : "ComfyUI", count: e.clips })}</li>
+              <li>{t("render.lineCards", { workers, gpu, dph: formatUsd(maxDph) })}</li>
+              <li>{t("render.lineTime", { time: formatMinutes(e.minutes), gb: e.models_gb })}</li>
               <li className={lowBalance ? "text-warn" : undefined}>
-                saldo Vast: {formatUsd(balance)}
-                {lowBalance ? " — mniej niż szacowany koszt!" : ""}
+                {t("render.lineBalance", { balance: formatUsd(balance) })}
+                {lowBalance ? t("render.lineBalanceLow") : ""}
               </li>
             </ul>
             <p className="text-ink-400">
-              Karty są płatne od chwili wynajęcia do zwolnienia. Po zakończeniu backend sam je zwalnia; w razie problemów użyj „Zwolnij wszystkie
-              karty”.
+              {t("render.billing", { release: t("vastPanel.releaseAll") })}
             </p>
           </div>
         )}

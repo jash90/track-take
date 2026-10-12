@@ -1,4 +1,4 @@
-"""Local web API for the UI (contract: apps/web/src/api/types.ts). Run with `uv run sunomv serve`."""
+"""Local web API for the UI (contract: apps/web/src/api/types.ts). Run with `uv run tracktake serve`."""
 
 from __future__ import annotations
 
@@ -16,15 +16,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from sunomv import keyframes, project, storyboard
-from sunomv.config import REPO_ROOT
-from sunomv.jobs import Conflict, Context, JobManager, clip_progress
-from sunomv.models import Analysis
-from sunomv.project import FORMATS, KEY_SETS, Project
+from tracktake import keyframes, project, storyboard
+from tracktake.config import REPO_ROOT
+from tracktake.jobs import Conflict, Context, JobManager, clip_progress
+from tracktake.models import Analysis
+from tracktake.project import FORMATS, KEY_SETS, Project
 
 ENGINE = REPO_ROOT / "engine"
 WEB_DIST = REPO_ROOT / "apps" / "web" / "dist"
-app = FastAPI(title="sunomv")
+app = FastAPI(title="tracktake")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
 jobs = JobManager()
@@ -143,13 +143,13 @@ def analyze(pid: str) -> dict:
     lang = p.meta().language
 
     def run(ctx: Context) -> None:
-        cmd = [sys.executable, "-m", "sunomv.cli", "analyze", song, "--out", p.root, "--language", lang]
+        cmd = [sys.executable, "-m", "tracktake.cli", "analyze", song, "--out", p.root, "--language", lang]
         if p.lyrics().strip():
             cmd[5:5] = ["--lyrics", p.lyrics_path]
         ctx.run(cmd, cwd=ENGINE)
         (p.root / "peaks.json").unlink(missing_ok=True)
 
-    return jobs.submit("analyze", pid, "Analiza utworu", run).to_dict()
+    return jobs.submit("analyze", pid, "Song analysis", run).to_dict()
 
 
 @app.get("/api/projects/{pid}/analysis")
@@ -236,9 +236,9 @@ def write_storyboard(pid: str, body: WriteBody) -> dict:
         sb = storyboard.write(p.storyboard(), body.shots, p.meta().style,
                               p.cover_ref if p.cover_ref.exists() else None, p.lyrics(), body.instructions, log=ctx.log)
         p.save_storyboard(sb)
-        ctx.log(f"zapisano storyboard ({sum(1 for s in sb['shots'] if s.get('scene'))}/{len(sb['shots'])} ujęć opisanych)")
+        ctx.log(f"storyboard saved ({sum(1 for s in sb['shots'] if s.get('scene'))}/{len(sb['shots'])} shots written)")
 
-    return jobs.submit("storyboard", pid, f"Reżyser pisze storyboard ({n} ujęć)", run).to_dict()
+    return jobs.submit("storyboard", pid, f"Director writes the storyboard ({n} shots)", run, {"shots": n}).to_dict()
 
 
 # ------------------------------------------------------------------------------------------------ keyframes
@@ -257,11 +257,11 @@ def make_character(pid: str, body: CharacterBody) -> dict:
     p = project.get(pid)
 
     def run(ctx: Context) -> None:
-        ctx.log("Codex generuje kartę postaci")
+        ctx.log("Codex is drawing the character sheet")
         sec = keyframes.character_sheet(p, force=body.force)
-        ctx.log(f"karta postaci gotowa ({sec:.0f}s)" if sec else "karta postaci już istnieje")
+        ctx.log(f"character sheet ready ({sec:.0f}s)" if sec else "character sheet already exists")
 
-    return jobs.submit("character", pid, "Karta postaci (Codex)", run).to_dict()
+    return jobs.submit("character", pid, "Character sheet (Codex)", run).to_dict()
 
 
 class CodexKeysBody(BaseModel):
@@ -278,7 +278,7 @@ def make_codex_keys(pid: str, body: CodexKeysBody) -> dict:
 
     def run(ctx: Context) -> None:
         if not p.character_sheet.exists() and any("woman" in s["scene"] for s in p.storyboard()["shots"]):
-            ctx.log("brak karty postaci - generuję ją najpierw")
+            ctx.log("no character sheet yet - drawing it first")
             keyframes.character_sheet(p)
         todo = keyframes.codex_jobs(p, body.shots, orients, force=body.force)
         ctx.progress(0, len(todo))
@@ -293,10 +293,11 @@ def make_codex_keys(pid: str, body: CodexKeysBody) -> dict:
         keyframes.run_codex(p, todo, max(1, min(body.workers, 8)), on_done, ctx.cancelled)
         failed = [j.out.name for j in todo if not j.out.exists()]
         if failed and not ctx.cancelled():
-            raise RuntimeError(f"{len(failed)} klatek się nie udało: {', '.join(failed[:6])}")
+            raise RuntimeError(f"{len(failed)} keyframes failed: {', '.join(failed[:6])}")
 
-    label = f"{len(body.shots)} ujęć" if body.shots else f"{len(planned)} brakujących"
-    return jobs.submit("keys_codex", pid, f"Klatki Codex ({label})", run).to_dict()
+    params = {"shots": len(body.shots)} if body.shots else {"missing": len(planned)}
+    label = f"{len(body.shots)} shots" if body.shots else f"{len(planned)} missing"
+    return jobs.submit("keys_codex", pid, f"Codex keyframes ({label})", run, params).to_dict()
 
 
 # ------------------------------------------------------------------------------------------------ videos / Vast
@@ -323,7 +324,7 @@ def _settings_ns(gpu: str | None, max_dph: float | None) -> argparse.Namespace:
 
 @app.get("/api/projects/{pid}/estimate")
 def estimate(pid: str, set: str = "codex", workers: int = 4) -> dict:
-    from sunomv import cli, vast
+    from tracktake import cli, vast
 
     p = project.get(pid)
     m = p.meta().settings
@@ -368,7 +369,7 @@ def render(pid: str, body: RenderBody) -> dict:
     if not (song and p.analysis_path.exists() and p.storyboard()):
         raise ValueError("song, analysis and storyboard are required")
     m = p.meta().settings
-    cmd = [sys.executable, "-m", "sunomv.cli", "remote", "run", "--full", p.full, "--set", body.set, "--song", song,
+    cmd = [sys.executable, "-m", "tracktake.cli", "remote", "run", "--full", p.full, "--set", body.set, "--song", song,
            "--analysis", p.analysis_path, "--workers", str(max(1, min(body.workers, 8))), "--gpu", body.gpu or m.gpu,
            "--max-dph", str(body.max_dph or m.max_dph), "--orient", p.meta().orientation, "--yes"]
     if not body.masters:
@@ -378,12 +379,13 @@ def render(pid: str, body: RenderBody) -> dict:
         ctx.run(cmd, cwd=ENGINE, parse=clip_progress(ctx))
 
     name = "Codex" if body.set == "codex" else "ComfyUI"
-    return jobs.submit("render", pid, f"Render na Vast ({name}, {body.workers} karty)", run).to_dict()
+    return jobs.submit("render", pid, f"Vast render ({name}, {body.workers} cards)", run,
+                       {"set": body.set, "workers": body.workers}).to_dict()
 
 
 @app.get("/api/vast")
 def vast_status() -> dict:
-    from sunomv import vast
+    from tracktake import vast
 
     key_file = Path.home() / ".config" / "vastai" / "vast_api_key"
     configured = key_file.exists() or bool(os.environ.get("VAST_API_KEY"))
@@ -421,7 +423,7 @@ def set_vast_key(body: VastKey) -> dict:
 
 @app.post("/api/vast/down")
 def vast_down() -> dict:
-    from sunomv import vast
+    from tracktake import vast
 
     states = vast.all_states()
     usd = sum(vast.destroy(st) for st in states)

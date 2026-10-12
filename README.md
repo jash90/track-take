@@ -1,8 +1,8 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# sunomv — stop-motion music videos from a Suno song
+# Tracktake — stop-motion music videos from a Suno song
 
-**sunomv** turns a song made in [Suno](https://suno.com), its lyrics and its cover art into a frame-by-frame,
+**Tracktake** turns a song made in [Suno](https://suno.com), its lyrics and its cover art into a frame-by-frame,
 paper cut-out style music video that moves to the beat. You type the style, pick horizontal (16:9) or vertical
 (9:16), and the tool does the rest. It analyses the music, writes a storyboard, draws a keyframe for every shot,
 animates the keyframes and assembles the video with karaoke captions.
@@ -25,7 +25,7 @@ animates the keyframes and assembles the video with karaoke captions.
 
 ### Fewer cuts: continuous takes
 
-A video made of 45 unrelated pictures feels like a slideshow. sunomv cuts hard only where the song enters a verse,
+A video made of 45 unrelated pictures feels like a slideshow. Tracktake cuts hard only where the song enters a verse,
 chorus, bridge, breakdown or outro, which gave **9 cuts instead of 45** in the test song. Every other shot *continues* the
 previous one:
 
@@ -39,7 +39,7 @@ roughly the size of compression noise. Cuts are editable per shot in the storybo
 
 ## Web UI
 
-`sunomv serve` starts a local studio (FastAPI and a React single-page app) at `http://127.0.0.1:8770`. The interface is in Polish for now.
+`tracktake serve` starts a local studio (FastAPI and a React single-page app) at `http://127.0.0.1:8770`. The interface is in Polish for now.
 
 ![Storyboard timeline with cuts and continuous transitions](site/assets/ui-timeline.jpg)
 
@@ -82,7 +82,7 @@ npm run build
 
 # start the studio
 cd ../../engine
-uv run sunomv serve            # → http://127.0.0.1:8770
+uv run tracktake serve            # → http://127.0.0.1:8770
 ```
 
 Add your Vast.ai API key in the UI (*Settings*) or with `uv run vastai set api-key <key>`.
@@ -95,22 +95,22 @@ Everything the UI does is also available from the CLI:
 
 ```bash
 # analysis → analysis.json (beats, downbeats, sections, word timings)
-uv run sunomv analyze song.mp3 --lyrics lyrics.txt --out data/work/my-song
+uv run tracktake analyze song.mp3 --lyrics lyrics.txt --out data/work/my-song
 
 # what a render would cost right now, and the cheapest matching offers
-uv run sunomv vast offers --gpu RTX_4090
+uv run tracktake vast offers --gpu RTX_4090
 
 # a whole video on Vast: rent, provision, clips, render, download, free the cards
-uv run sunomv remote run --full data/projects/<id>/full --set codex \
+uv run tracktake remote run --full data/projects/<id>/full --set codex \
   --song data/projects/<id>/input/song.mp3 --analysis data/projects/<id>/analysis.json \
   --workers 1 --orient landscape            # prints the estimate; add --yes to rent
 
 # run the analysis on a Vast GPU instead of the Mac
-uv run sunomv remote analyze --song song.mp3 --lyrics lyrics.txt --out data/work/my-song --yes
+uv run tracktake remote analyze --song song.mp3 --lyrics lyrics.txt --out data/work/my-song --yes
 
 # manage instances
-uv run sunomv vast status
-uv run sunomv vast down --all
+uv run tracktake vast status
+uv run tracktake vast down --all
 ```
 
 ## Vast.ai remote mode
@@ -135,15 +135,15 @@ continuous chains in parallel).
 
 ## Configuration
 
-`config/sunomv.toml` holds the backend choice (local or Vast ComfyUI), the video engine (`mlx` = LTX-2.3 on the
+`config/tracktake.toml` holds the backend choice (local or Vast ComfyUI), the video engine (`mlx` = LTX-2.3 on the
 Mac, `wan` = Wan 2.2 on CUDA) and the Vast offer filters (GPU, max $/h, reliability, network, disk, image,
-ComfyUI commit, model sets). Environment variables `SUNOMV_*` override single values.
+ComfyUI commit, model sets). Environment variables `TRACKTAKE_*` override single values.
 
 ## Repository layout
 
 ```
-engine/            Python package `sunomv` (uv)
-  src/sunomv/
+engine/            Python package `tracktake` (uv)
+  src/tracktake/
     analysis/      stems, beats, sections, lyric alignment
     comfy/         ComfyUI client and API graphs (Z-Image, Qwen edit, Wan I2V / first-last frame)
     render/        compositor, stop-motion stepping, captions, encoders
@@ -156,7 +156,7 @@ engine/            Python package `sunomv` (uv)
   tests/           pytest (graphs are checked against the pinned ComfyUI node schemas)
 apps/web/          Vite + React 19 + TanStack Query + Tailwind 4 studio UI
 comfy/provisioning/  Vast worker setup (ComfyUI, models, runtime)
-config/            sunomv.toml
+config/            tracktake.toml
 docs/              plan, benchmarks and the cost report (Polish)
 site/              the GitHub Pages site
 ```

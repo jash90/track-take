@@ -1,15 +1,15 @@
 import type { Shot } from "../api/types";
-import { plural } from "./format";
+import type { TFn } from "../i18n";
 
 /** Missing flag = cut (old storyboards); the first shot is always a cut. */
 export function isCut(shot: Pick<Shot, "cut">, index: number): boolean {
   return index === 0 || shot.cut !== false;
 }
 
-export function continuitySummary(shots: Pick<Shot, "cut">[]): string {
+export function continuitySummary(shots: Pick<Shot, "cut">[], t: TFn): string {
   const cuts = shots.filter((s, i) => isCut(s, i)).length;
   const flows = shots.length - cuts;
-  return `${cuts} ${plural(cuts, "cięcie", "cięcia", "cięć")} · ${flows} ${plural(flows, "przejście ciągłe", "przejścia ciągłe", "przejść ciągłych")}`;
+  return `${t("cont.cuts", { count: cuts })} · ${t("cont.flows", { count: flows })}`;
 }
 
 /** Continuous shots right after `index` — their keyframes were drawn from this one. */

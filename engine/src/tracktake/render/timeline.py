@@ -8,12 +8,12 @@ from pathlib import Path
 
 import numpy as np
 
-from sunomv.models import Analysis
-from sunomv.render.captions import line_at, overlay, render_caption
-from sunomv.render.compositor import Format, Shot, compose
-from sunomv.render.encode import VideoWriter
-from sunomv.render.stepping import active_drawing, drawing_frames, pulse_track
-from sunomv.timegrid import frame_at, frames_of
+from tracktake.models import Analysis
+from tracktake.render.captions import line_at, overlay, render_caption
+from tracktake.render.compositor import Format, Shot, compose
+from tracktake.render.encode import VideoWriter
+from tracktake.render.stepping import active_drawing, drawing_frames, pulse_track
+from tracktake.timegrid import frame_at, frames_of
 
 
 @dataclass

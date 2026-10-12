@@ -1,7 +1,7 @@
 """Rent a Vast.ai GPU, provision ComfyUI on it and reach it from this Mac through an SSH tunnel.
 
 Everything goes through the official `vastai` CLI with `--raw` (JSON). Renting costs money, so `up` refuses offers
-above `max_dph` and the CLI only rents with an explicit --yes. State lives in ~/.config/sunomv/vast.json.
+above `max_dph` and the CLI only rents with an explicit --yes. State lives in ~/.config/tracktake/vast.json.
 """
 
 from __future__ import annotations
@@ -16,11 +16,11 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from sunomv.config import REPO_ROOT, STATE_DIR, VastSettings
+from tracktake.config import REPO_ROOT, STATE_DIR, VastSettings
 
 SETUP_SCRIPT = REPO_ROOT / "comfy" / "provisioning" / "vast_setup.sh"
 STATE_FILE = STATE_DIR / "vast.json"
-LABEL = "sunomv"
+LABEL = "tracktake"
 
 Runner = Callable[[list[str]], str]
 

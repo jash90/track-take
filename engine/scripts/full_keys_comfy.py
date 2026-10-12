@@ -19,9 +19,9 @@ from pathlib import Path
 
 from PIL import Image
 
-from sunomv.comfy.client import ComfyClient
-from sunomv.comfy.graphs import ZIMAGE_CUDA, zimage
-from sunomv.shards import split_args, wanted
+from tracktake.comfy.client import ComfyClient
+from tracktake.comfy.graphs import ZIMAGE_CUDA, zimage
+from tracktake.shards import split_args, wanted
 
 SIZE = {"landscape": (1536, 1024), "portrait": (1024, 1536)}
 FRAMING = {
@@ -58,7 +58,7 @@ def main() -> None:
             except queue.Empty:
                 return
             w, h = SIZE[orientation]
-            r = client.run(zimage(prompt, seed=seed, width=w, height=h, m=ZIMAGE_CUDA, prefix=f"sunomv/keys/{out.stem}"))
+            r = client.run(zimage(prompt, seed=seed, width=w, height=h, m=ZIMAGE_CUDA, prefix=f"tracktake/keys/{out.stem}"))
             Image.open(io.BytesIO(r.images[0])).convert("RGB").save(out)
             with lock:
                 report[out.name] = round(r.seconds, 1)

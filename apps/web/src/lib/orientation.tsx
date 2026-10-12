@@ -1,9 +1,10 @@
 import type { FormatName, Orientation, Project } from "../api/types";
 import { cx } from "./cx";
+import { useT, type Key } from "../i18n";
 
-export const ORIENTATIONS: { value: Orientation; format: FormatName; label: string; ratio: string; hint: string }[] = [
-  { value: "landscape", format: "16x9", label: "Poziomy", ratio: "16:9", hint: "YouTube, ekran, telewizor" },
-  { value: "portrait", format: "9x16", label: "Pionowy", ratio: "9:16", hint: "Shorts, Reels, TikTok" },
+export const ORIENTATIONS: { value: Orientation; format: FormatName; label: Key; ratio: string; hint: Key }[] = [
+  { value: "landscape", format: "16x9", label: "orient.landscape", ratio: "16:9", hint: "orient.landscapeHint" },
+  { value: "portrait", format: "9x16", label: "orient.portrait", ratio: "9:16", hint: "orient.portraitHint" },
 ];
 
 /** Tolerates projects created before orientation existed (treated as landscape). */
@@ -34,19 +35,20 @@ export function FrameGlyph({ orientation, size = 14, className }: { orientation:
   );
 }
 
-/** "▭ Poziomy · 16:9" chip used on cards, headers and steps. */
+/** "▭ Horizontal · 16:9" chip used on cards, headers and steps. */
 export function FormatBadge({ orientation, className }: { orientation: Orientation; className?: string }) {
   const info = orientationInfo(orientation);
+  const t = useT();
   return (
     <span
-      title={`${info.label} ${info.ratio} — ${info.hint}`}
+      title={`${t(info.label)} ${info.ratio} — ${t(info.hint)}`}
       className={cx(
         "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full border border-ink-600 bg-ink-900/80 px-2.5 font-mono text-[0.68rem] text-ink-200",
         className,
       )}
     >
       <FrameGlyph orientation={orientation} size={12} className="text-safe" />
-      {info.label} · {info.ratio}
+      {t(info.label)} · {info.ratio}
     </span>
   );
 }

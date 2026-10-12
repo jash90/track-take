@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Button } from "./ui";
 import { Dialog } from "./Dialog";
+import { useT } from "../i18n";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -14,6 +15,7 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ open, title, children, confirmLabel, danger, busy, onConfirm, onClose }: ConfirmDialogProps) {
+  const t = useT();
   return (
     <Dialog
       open={open}
@@ -22,7 +24,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, danger, bus
       footer={
         <>
           <Button variant="ghost" onClick={onClose} autoFocus>
-            Anuluj
+            {t("common.cancel")}
           </Button>
           <Button variant={danger ? "danger" : "primary"} busy={busy} onClick={onConfirm}>
             {confirmLabel}

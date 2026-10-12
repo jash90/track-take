@@ -11,6 +11,7 @@ import { KeysStep } from "./features/keys/KeysStep";
 import { RenderStep } from "./features/render/RenderStep";
 import { ResultStep } from "./features/result/ResultStep";
 import { NotFound } from "./components/NotFound";
+import { I18nProvider } from "./i18n";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,10 +49,12 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Toaster>
-        <RouterProvider router={router} />
-      </Toaster>
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <Toaster>
+          <RouterProvider router={router} />
+        </Toaster>
+      </QueryClientProvider>
+    </I18nProvider>
   );
 }

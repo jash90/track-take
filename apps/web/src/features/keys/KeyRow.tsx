@@ -4,6 +4,7 @@ import { Button } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { formatTime } from "../../lib/format";
 import { kindColor } from "../../lib/kinds";
+import { useT } from "../../i18n";
 
 export const SET_LABEL: Record<KeySet, string> = { codex: "Codex", comfy: "ComfyUI" };
 
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orientation, keys, onOpen, onRegenerate, regenerating }: Props) {
+  const t = useT();
   return (
     <li className="grid grid-cols-[180px_minmax(0,1fr)] gap-5 border-b border-ink-800 py-4 [content-visibility:auto] [contain-intrinsic-size:auto_190px] last:border-b-0">
       <div className="flex min-w-0 flex-col gap-1">
@@ -31,10 +33,10 @@ export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orient
         </div>
         {!cut && (
           <span
-            title="Ciągłe: klatka powstaje z klatki poprzedniego ujęcia, a poprzedni klip kończy się dokładnie na niej"
+            title={t("keys.continuousTip")}
             className="w-fit rounded-full border border-ink-600 bg-ink-900 px-2 py-px font-mono text-[0.62rem] text-ink-300"
           >
-            ↳ ciągłe
+            {t("keys.continuousBadge")}
           </span>
         )}
         <span className="flex items-center gap-1.5 text-[0.72rem] text-ink-400">
@@ -50,9 +52,9 @@ export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orient
           className="-ml-3 mt-auto w-fit"
           busy={regenerating}
           onClick={() => onRegenerate(shot.id)}
-          title={dependents.length ? `Uwaga: ${dependents.join(", ")} powstały z tej klatki (ujęcia ciągłe) i mogą przestać pasować` : undefined}
+          title={dependents.length ? t("keys.depsTip", { ids: dependents.join(", ") }) : undefined}
         >
-          ↻ {keys.codex?.[orientation] ? "Wygeneruj ponownie (Codex)" : "Wygeneruj (Codex)"}
+          ↻ {keys.codex?.[orientation] ? t("keys.regen") : t("keys.gen")}
           {dependents.length > 0 && <span className="text-warn" aria-hidden> ⚠</span>}
         </Button>
       </div>
@@ -79,10 +81,11 @@ export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orient
 
 function Thumb({ src, full, className, label, onOpen }: { src?: string | null; full?: string | null; className: string; label: string; onOpen: () => void }) {
   const img = src ?? full;
+  const t = useT();
   if (!img) {
     return (
       <div className={cx(className, "grid place-items-center rounded-md border border-dashed border-ink-700 bg-ink-900/60 text-[0.65rem] text-ink-600")}>
-        brak
+        {t("common.none")}
       </div>
     );
   }
@@ -90,7 +93,7 @@ function Thumb({ src, full, className, label, onOpen }: { src?: string | null; f
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Powiększ ${label}`}
+      aria-label={t("common.enlarge", { label })}
       className={cx(className, "group overflow-hidden rounded-md border border-ink-700 bg-ink-900 transition-colors hover:border-safe")}
     >
       <img src={img} alt={label} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />

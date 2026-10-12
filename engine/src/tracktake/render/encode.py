@@ -8,7 +8,7 @@ from typing import Self
 
 import numpy as np
 
-from sunomv.render.encoders import video_args
+from tracktake.render.encoders import video_args
 
 
 class VideoWriter:

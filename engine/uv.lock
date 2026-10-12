@@ -2009,81 +2009,6 @@ wheels = [
 ]
 
 [[package]]
-name = "sunomv"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "numpy" },
-    { name = "opencv-python-headless" },
-    { name = "pillow" },
-    { name = "pydantic" },
-    { name = "websockets" },
-]
-
-[package.optional-dependencies]
-analysis = [
-    { name = "beat-this" },
-    { name = "demucs", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "demucs", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "librosa" },
-    { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "scipy" },
-    { name = "soundfile" },
-    { name = "stable-ts" },
-    { name = "torch" },
-    { name = "torchaudio" },
-]
-assets = [
-    { name = "rembg", extra = ["cpu"] },
-]
-server = [
-    { name = "fastapi" },
-    { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-vast = [
-    { name = "vastai" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "beat-this", marker = "extra == 'analysis'", git = "https://github.com/CPJKU/beat_this" },
-    { name = "demucs", marker = "extra == 'analysis'", specifier = ">=4.0.1" },
-    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "librosa", marker = "extra == 'analysis'", specifier = ">=0.10.2" },
-    { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'analysis'", specifier = ">=0.4" },
-    { name = "numpy", specifier = ">=2.0" },
-    { name = "opencv-python-headless", specifier = ">=4.10" },
-    { name = "pillow", specifier = ">=10.4" },
-    { name = "pydantic", specifier = ">=2.8" },
-    { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.9" },
-    { name = "rembg", extras = ["cpu"], marker = "extra == 'assets'", specifier = ">=2.0.60" },
-    { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.13" },
-    { name = "soundfile", marker = "extra == 'analysis'", specifier = ">=0.12" },
-    { name = "stable-ts", marker = "extra == 'analysis'", specifier = ">=2.17" },
-    { name = "torch", marker = "extra == 'analysis'", specifier = ">=2.4" },
-    { name = "torchaudio", marker = "extra == 'analysis'", specifier = ">=2.4" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
-    { name = "vastai", marker = "extra == 'vast'", specifier = ">=0.3" },
-    { name = "websockets", specifier = ">=13" },
-]
-provides-extras = ["analysis", "assets", "vast", "server"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2183,6 +2108,81 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ea/b2a5bd54b28a324dae8211928b2d730b6547500342c7e6c6dea08bd0a485/tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4", size = 171846, upload-time = "2026-09-11T07:25:16.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl", hash = "sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73", size = 80199, upload-time = "2026-09-11T07:25:14.599Z" },
+]
+
+[[package]]
+name = "tracktake"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "opencv-python-headless" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "websockets" },
+]
+
+[package.optional-dependencies]
+analysis = [
+    { name = "beat-this" },
+    { name = "demucs", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "demucs", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "librosa" },
+    { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "scipy" },
+    { name = "soundfile" },
+    { name = "stable-ts" },
+    { name = "torch" },
+    { name = "torchaudio" },
+]
+assets = [
+    { name = "rembg", extra = ["cpu"] },
+]
+server = [
+    { name = "fastapi" },
+    { name = "python-multipart" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+vast = [
+    { name = "vastai" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beat-this", marker = "extra == 'analysis'", git = "https://github.com/CPJKU/beat_this" },
+    { name = "demucs", marker = "extra == 'analysis'", specifier = ">=4.0.1" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "librosa", marker = "extra == 'analysis'", specifier = ">=0.10.2" },
+    { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'analysis'", specifier = ">=0.4" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "opencv-python-headless", specifier = ">=4.10" },
+    { name = "pillow", specifier = ">=10.4" },
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.9" },
+    { name = "rembg", extras = ["cpu"], marker = "extra == 'assets'", specifier = ">=2.0.60" },
+    { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.13" },
+    { name = "soundfile", marker = "extra == 'analysis'", specifier = ">=0.12" },
+    { name = "stable-ts", marker = "extra == 'analysis'", specifier = ">=2.17" },
+    { name = "torch", marker = "extra == 'analysis'", specifier = ">=2.4" },
+    { name = "torchaudio", marker = "extra == 'analysis'", specifier = ">=2.4" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
+    { name = "vastai", marker = "extra == 'vast'", specifier = ">=0.3" },
+    { name = "websockets", specifier = ">=13" },
+]
+provides-extras = ["analysis", "assets", "vast", "server"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.6" },
 ]
 
 [[package]]
