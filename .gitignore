@@ -1,6 +1,7 @@
 # data: songs, covers, renders (local only)
 data/
 *.mp4
+!site/assets/*.mp4
 *.wav
 *.mp3
 
