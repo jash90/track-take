@@ -1,0 +1,19 @@
+# data: songs, covers, renders (local only)
+data/
+*.mp4
+*.wav
+*.mp3
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# os
+.DS_Store
+
+# browser tooling
+.playwright-mcp/

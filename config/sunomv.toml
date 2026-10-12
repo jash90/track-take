@@ -1,0 +1,27 @@
+# suno-audio-wideo settings. Environment variables override single values (see engine/src/sunomv/config.py).
+
+[comfy]
+# local = ComfyUI on this Mac (~/Projects/ComfyUI), vast = ComfyUI on a rented Vast.ai GPU reached through an SSH tunnel
+backend = "local"
+local_url = "http://127.0.0.1:8188"
+
+[video]
+# image-to-video engine per backend: mlx = LTX-2.3 int4 on this Mac, wan = Wan 2.2 14B I2V in ComfyUI (needs CUDA)
+local = "mlx"
+vast = "wan"
+
+[vast]
+# offer filters (vastai search offers syntax); cheapest matching offer wins
+gpu = "RTX_4090"                 # RTX_4090 (24 GB) or RTX_5090 (32 GB)
+max_dph = 0.60                   # refuse offers above this many USD per hour
+min_reliability = 0.98
+min_inet_down = 500              # Mbit/s; models are ~45 GB, slow hosts waste paid minutes
+disk_gb = 120
+image = "pytorch/pytorch:@vastai-automatic-tag"
+# ComfyUI on the instance is pinned to the same commit as the local install, so graphs validated here run there
+comfy_repo = "https://github.com/comfyanonymous/ComfyUI"
+comfy_commit = "0df64eb"
+remote_port = 18188
+local_port = 8189                # tunnel endpoint on this Mac (8188 stays free for local ComfyUI)
+models = ["wan22_i2v", "zimage"]
+ssh_key = "~/.ssh/id_ed25519"

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>suno-audio-wideo: raport kosztów i pracy na Vast</title>
+<style>
+.viz-root{color-scheme:light;--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--grid:#e4e3df;
+  --series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--surface-1:#1a1a19;
+  --text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#3a3a37;--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500}}
+:root[data-theme="dark"] .viz-root{color-scheme:dark;--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;
+  --grid:#3a3a37;--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500}
+body{margin:0;font:14px/1.5 var(--font-sans,system-ui);color:var(--foreground,var(--text-primary))}
+h2{font-size:17px;margin:28px 0 8px}h2:first-child{margin-top:0}
+p,li{color:var(--muted-foreground,var(--text-secondary))}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:10px 0 4px}
+.kpi{padding:12px 14px;border:1px solid var(--border,#ddd);border-radius:var(--radius,10px)}
+.kpi b{display:block;font-size:22px;color:var(--foreground,var(--text-primary));font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted-foreground,var(--text-secondary))}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border,#ddd);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted-foreground,var(--text-secondary));font-size:12px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:6px 0 2px;color:var(--muted-foreground,var(--text-secondary))}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.chart{position:relative}.row{display:grid;grid-template-columns:150px 1fr 54px;align-items:center;gap:8px;height:30px}
+.row .lbl{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .val{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.bar{display:flex;gap:2px;height:16px}.bar div{height:100%;min-width:2px}
+.bar div:first-child{border-radius:4px 0 0 4px}.bar div:last-child{border-radius:0 4px 4px 0}.bar div:only-child{border-radius:4px}
+.tip{position:fixed;pointer-events:none;background:var(--popover,#222);color:var(--popover-foreground,#fff);border:1px solid var(--border,#444);
+  border-radius:8px;padding:6px 9px;font-size:12px;white-space:nowrap;display:none;z-index:3}
+.pairs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.pair img{width:100%;border-radius:6px;display:block}
+.pair small{display:block;margin:3px 0 6px;color:var(--muted-foreground,var(--text-secondary))}
+code,pre{font-family:var(--font-mono,ui-monospace);font-size:12px}
+pre{background:var(--code-background,#f4f4f2);color:var(--code-foreground,inherit);padding:12px;border-radius:var(--radius,8px);overflow:auto}
+.ok{color:var(--success,#1a7f37)}.warn{color:var(--warning,#9a6700)}
+@media (max-width:560px){.pairs{grid-template-columns:1fr}.row{grid-template-columns:110px 1fr 46px}}
+</style></head>
+<body><div class="viz-root">
+
+<h2>Podsumowanie</h2>
+<div class="kpis">
+ <div class="kpi"><b>8,69 $</b><span>cały rachunek Vast.ai</span></div>
+ <div class="kpi"><b>6,72 $</b><span>pobieranie modeli (77%)</span></div>
+ <div class="kpi"><b>1,55 $</b><span>praca GPU</span></div>
+ <div class="kpi"><b>~2,3 $</b><span>ta sama praca na tanich hostach</span></div>
+ <div class="kpi"><b>4:29 × 2</b><span>teledysk 16:9 i 9:16</span></div>
+</div>
+<p>Codex (92 obrazy) nie kosztował nic ekstra: liczy się w ramach subskrypcji ChatGPT i jej limitów. Analiza, LTX i render na Macu: tylko prąd.</p>
+
+<h2>Koszt Vast.ai według instancji</h2>
+<div class="legend"><span><i style="background:var(--series-1)"></i>GPU</span><span><i style="background:var(--series-2)"></i>Pobieranie</span>
+ <span><i style="background:var(--series-3)"></i>Dysk</span><span><i style="background:var(--series-4)"></i>Wysyłanie</span></div>
+<div class="chart" id="chart"></div>
+<div class="tip" id="tip"></div>
+<table>
+ <thead><tr><th>Instancja</th><th>Do czego</th><th class="n">GPU</th><th class="n">Pobieranie</th><th class="n">Dysk</th><th class="n">Wysyłanie</th><th class="n">Razem</th></tr></thead>
+ <tbody id="tbl"></tbody>
+</table>
+<p>Trzy hosty brały za pobieranie 0,026–0,039 $/GB (inni 0,004 $/GB). Przy ~60 GB modeli na kartę to 1,57–2,34 $ za samo pobranie.
+ <span class="ok">Naprawione:</span> filtr <code>inet_down_cost ≤ 0,006 $/GB</code>, koszt pobrania liczony w cenie oferty, a do klipów z klatek Codex tylko Wan (~41 GB).</p>
+
+<h2>Czas pracy (cały teledysk)</h2>
+<table>
+ <thead><tr><th>Etap</th><th>Gdzie</th><th class="n">Czas</th><th>Uwagi</th></tr></thead>
+ <tbody>
+  <tr><td>Analiza audio i tekstu</td><td>Mac (MPS/MLX)</td><td class="n">1,5 min</td><td>81 BPM, 90 taktów, 16 sekcji</td></tr>
+  <tr><td>Karta postaci + 90 klatek</td><td>Codex (4 naraz)</td><td class="n">26 min</td><td>0 błędów, ~60 s/obraz</td></tr>
+  <tr><td>90 klatek porównawczych</td><td>ComfyUI Z-Image, 4× RTX 4090</td><td class="n">3 min</td><td>~6–7 s/obraz</td></tr>
+  <tr><td>90 klipów Wan 2.2</td><td>4× RTX 4090</td><td class="n">28 min</td><td>~70–90 s/klip, 81 klatek</td></tr>
+  <tr><td>Render 16:9 i 9:16</td><td>Mac</td><td class="n">2 × ~6 min</td><td>przeciążył pamięć Maca i zerwał tunele</td></tr>
+ </tbody>
+</table>
+
+<h2>Codex czy ComfyUI (klatki kluczowe)</h2>
+<div class="pairs">
+ <div class="pair"><img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/codex_s10_landscape.jpg"><small>s10 · Codex</small>
+  <img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/comfy_s10_landscape.jpg"><small>s10 · ComfyUI</small></div>
+ <div class="pair"><img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/codex_s12_landscape.jpg"><small>s12 · Codex</small>
+  <img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/comfy_s12_landscape.jpg"><small>s12 · ComfyUI</small></div>
+ <div class="pair"><img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/codex_s30_landscape.jpg"><small>s30 · Codex</small>
+  <img src="/Users/bartlomiejzimny/.t3/projects/suno-audio-wideo/data/work/silence/full/thumbs/comfy_s30_landscape.jpg"><small>s30 · ComfyUI</small></div>
+</div>
+<table>
+ <thead><tr><th></th><th>Codex</th><th>ComfyUI (Z-Image)</th></tr></thead>
+ <tbody>
+  <tr><td>Nastrój, paleta</td><td>ciemny, filmowy, blisko okładki</td><td>jaśniejszy, bajkowy</td></tr>
+  <tr><td>Ta sama postać</td><td>bardzo spójna (karta postaci jako referencja)</td><td>twarz się zmienia (tylko opis)</td></tr>
+  <tr><td>Rozumienie sceny</td><td>trafne metafory</td><td>czasem dosłownie (duch jak prześcieradło)</td></tr>
+  <tr><td>Szybkość / koszt</td><td>~60 s/obraz, w subskrypcji</td><td>~7 s/obraz, na płatnej karcie</td></tr>
+ </tbody>
+</table>
+<p>Werdykt na klatkach: <b>Codex</b>. Pełne porównanie wideo czeka na klipy ComfyUI (85 z 90 przerwanych przez zerwane tunele).</p>
+
+<h2>Co teraz działa na Vast</h2>
+<table>
+ <thead><tr><th>Etap</th><th>Gdzie</th><th>Stan</th></tr></thead>
+ <tbody>
+  <tr><td>Analiza audio (stemy, bity, tekst)</td><td><b>Vast</b> (CUDA) lub Mac</td><td class="warn">gotowe, niesprawdzone na Vast</td></tr>
+  <tr><td>Storyboard</td><td>Claude</td><td>—</td></tr>
+  <tr><td>Karta postaci i klatki Codex</td><td>Mac zleca, OpenAI liczy</td><td class="ok">działa</td></tr>
+  <tr><td>Klatki ComfyUI (Z-Image)</td><td><b>Vast</b>, każda karta swoje ujęcia</td><td class="ok">działa (tunel); tryb zdalny gotowy</td></tr>
+  <tr><td>Klipy Wan 2.2</td><td><b>Vast</b>, zadanie w tle, bez tunelu</td><td class="ok">działa (tunel); tryb zdalny gotowy</td></tr>
+  <tr><td>Zbieranie klipów u lidera formatu</td><td><b>Vast → Vast</b></td><td class="warn">gotowe, niesprawdzone na Vast</td></tr>
+  <tr><td>Render 16:9 i 9:16 + napisy</td><td><b>Vast</b>, 2 karty równolegle (NVENC lub CPU)</td><td class="ok">sprawdzone w kontenerze Linux</td></tr>
+  <tr><td>Gotowe MP4</td><td>Mac pobiera tylko wynik</td><td>—</td></tr>
+ </tbody>
+</table>
+
+<h2>Wycena następnych uruchomień</h2>
+<table>
+ <thead><tr><th>Polecenie</th><th class="n">Czas</th><th class="n">Koszt</th></tr></thead>
+ <tbody>
+  <tr><td>Cały teledysk z klatek Codex, 4 karty</td><td class="n">~44 min</td><td class="n">~1,40 $</td></tr>
+  <tr><td>Wersja ComfyUI (klatki też na Vast), 4 karty</td><td class="n">~44 min</td><td class="n">~1,55 $</td></tr>
+  <tr><td>Sama analiza audio, 1 karta</td><td class="n">~16 min</td><td class="n">~0,11 $</td></tr>
+ </tbody>
+</table>
+<pre>cd engine
+# bez --yes: tylko plan i wycena; karty zawsze zwalniane na końcu
+uv run sunomv remote run --full ../data/work/silence/full --set codex \
+  --song ../data/fixtures/silence/song.mp3 --analysis ../data/work/silence/analysis.json --workers 4 --yes
+uv run sunomv remote run ... --set comfy --workers 4 --yes
+uv run sunomv remote analyze --song song.mp3 --lyrics lyrics.txt --out wynik/ --yes</pre>
+
+<script>
+const S=[["gpu","GPU","--series-1"],["dl","Pobieranie","--series-2"],["st","Dysk","--series-3"],["up","Wysyłanie","--series-4"]];
+const D=[
+ {id:"55434407",what:"1. test, nieudana instalacja",gpu:.016,dl:0,st:.004,up:0},
+ {id:"55435266",what:"test refrenu (Wan)",gpu:.180,dl:.238,st:.016,up:.004},
+ {id:"55438376",what:"RTX 5090 osierocona",gpu:0,dl:0,st:.011,up:0},
+ {id:"55439720",what:"flota w1",gpu:.312,dl:1.565,st:.053,up:.042},
+ {id:"55439723",what:"flota w2",gpu:.313,dl:2.340,st:.053,up:.072},
+ {id:"55439729",what:"flota w3",gpu:.334,dl:2.340,st:.053,up:.076},
+ {id:"55439735",what:"flota w4",gpu:.395,dl:.234,st:.032,up:.005}];
+const f=v=>(Math.round(v*100+1e-6)/100).toFixed(2).replace('.',',')+" $";
+const tot=d=>S.reduce((a,[k])=>a+d[k],0), max=Math.max(...D.map(tot));
+const chart=document.getElementById("chart"),tip=document.getElementById("tip");
+chart.innerHTML=D.map((d,i)=>`<div class="row"><span class="lbl" title="${d.what}">${d.what}</span><div class="bar" style="width:${(tot(d)/max*100).toFixed(1)}%">${
+ S.filter(([k])=>d[k]>0).map(([k,l,c])=>`<div data-i="${i}" data-k="${k}" style="flex:${d[k]};background:var(${c})"></div>`).join("")}</div><span class="val">${f(tot(d))}</span></div>`).join("");
+chart.addEventListener("mousemove",e=>{const t=e.target.closest(".bar div");if(!t){tip.style.display="none";return}
+ const d=D[+t.dataset.i],[,l]=S.find(([k])=>k===t.dataset.k);tip.innerHTML=`<b>${d.what}</b> (${d.id})<br>${l}: ${f(d[t.dataset.k])}`;
+ tip.style.display="block";tip.style.left=Math.min(e.clientX+12,innerWidth-200)+"px";tip.style.top=(e.clientY+14)+"px"});
+chart.addEventListener("mouseleave",()=>tip.style.display="none");
+const sum=k=>D.reduce((a,d)=>a+d[k],0);
+document.getElementById("tbl").innerHTML=D.map(d=>`<tr><td><code>${d.id}</code></td><td>${d.what}</td>${S.map(([k])=>`<td class="n">${d[k]?f(d[k]):"—"}</td>`).join("")}<td class="n"><b>${f(tot(d))}</b></td></tr>`).join("")
+ +`<tr class="total"><td></td><td>Razem</td>${S.map(([k])=>`<td class="n">${f(sum(k))}</td>`).join("")}<td class="n">${f(D.reduce((a,d)=>a+tot(d),0))}</td></tr>`;
+</script>
+</div></body></html>

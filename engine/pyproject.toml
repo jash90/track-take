@@ -1,0 +1,59 @@
+[project]
+name = "sunomv"
+version = "0.1.0"
+description = "Beat-synced stop-motion music videos from a Suno song, its lyrics and cover, rendered with ComfyUI"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.0",
+    "pydantic>=2.8",
+    "httpx>=0.27",
+    "websockets>=13",
+    "pillow>=10.4",
+    "opencv-python-headless>=4.10",
+]
+
+[project.optional-dependencies]
+analysis = [
+    "librosa>=0.10.2",
+    "soundfile>=0.12",
+    "scipy>=1.13",
+    "torch>=2.4",
+    "torchaudio>=2.4",
+    "demucs>=4.0.1",
+    "stable-ts>=2.17",
+    "beat-this",
+    "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+assets = [
+    "rembg[cpu]>=2.0.60",
+]
+vast = [
+    "vastai>=0.3",
+]
+server = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+sunomv = "sunomv.cli:main"
+
+[tool.uv.sources]
+beat-this = { git = "https://github.com/CPJKU/beat_this" }
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sunomv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
