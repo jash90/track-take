@@ -82,7 +82,7 @@ export function StoryboardStep() {
   const planned = sbQ.data ? storyboardAnimation(sbQ.data) : null;
   // planned for another style: the shot rhythm doesn't fit until re-planned (never automatic)
   const animMismatch = planned !== null && planned !== wanted;
-  const tableau = (planned ?? wanted) === "tableau";
+  const shown = planned ?? wanted;
 
   const pick = useCallback((sid: string, additive: boolean) => {
     setPrimary(sid);
@@ -215,7 +215,7 @@ export function StoryboardStep() {
           </>
         }
       >
-        {t(tableau ? "sb.leadTableau" : "sb.lead")}
+        {t(shown === "journey" ? "sb.leadJourney" : shown === "tableau" ? "sb.leadTableau" : "sb.lead")}
         {draft && (
           <>
             <Trans k="sb.writtenCount" values={{ written: <b className="text-ink-200">{written}/{shots.length}</b> }} />
@@ -266,7 +266,7 @@ export function StoryboardStep() {
           {sbQ.isPending && !noStoryboard && <Loading label={t("sb.loading")} />}
           {noStoryboard && (
             <Empty title={t("sb.empty")} action={<Button variant="primary" busy={plan.isPending} onClick={() => plan.mutate()}>{t("sb.planFirst")}</Button>}>
-              {t(wanted === "tableau" ? "sb.emptyBodyTableau" : "sb.emptyBody")}
+              {t(wanted === "journey" ? "sb.emptyBodyJourney" : wanted === "tableau" ? "sb.emptyBodyTableau" : "sb.emptyBody")}
             </Empty>
           )}
           {draft && shots.length > 0 && (
@@ -329,7 +329,7 @@ export function StoryboardStep() {
       >
         {animMismatch && planned
           ? t("sb.animReplanBody", { planned: animName(planned), current: animName(wanted), write: t("sb.write") })
-          : t(wanted === "tableau" ? "sb.planBodyTableau" : "sb.planBody")}
+          : t(wanted === "journey" ? "sb.planBodyJourney" : wanted === "tableau" ? "sb.planBodyTableau" : "sb.planBody")}
         {dirty && t("sb.planDirty")}
         <InlineError error={plan.error} />
       </ConfirmDialog>

@@ -20,9 +20,19 @@ def test_stopmotion_stays_the_default_plan():
     assert zoom_span([{"cut": True}, {"cut": False}], 1, animation.get(None)["zoom"]) == (1.02, 1.04)
 
 
-def test_tableau_follows_the_song_parts():
-    a = analysis()  # bar 3 s: verse 0-24, a 1 s build-up blip, chorus 25-60
+def test_tableau_cuts_every_shot_on_the_bar():
+    a = analysis()
     shots = storyboard.plan_shots(a, "tableau")
+    assert all(s["cut"] for s in shots) and not any("role" in s for s in shots)
+    assert min(s["end"] - s["start"] for s in shots[:-1]) >= 4.0 - 0.01
+    sb = storyboard.replan(a, None, "", "tableau")
+    prompt = storyboard.director_prompt(sb, [shots[0]["id"]], "", None, "")
+    assert animation.ANIMATIONS["tableau"]["motion"] in prompt and "role:" not in prompt
+
+
+def test_journey_follows_the_song_parts():
+    a = analysis()  # bar 3 s: verse 0-24, a 1 s build-up blip, chorus 25-60
+    shots = storyboard.plan_shots(a, "journey")
     assert all(s["cut"] for s in shots)
     verse = [s for s in shots if s["kind"] == "verse"]
     chorus = [s for s in shots if s["kind"] == "chorus"]
@@ -31,9 +41,9 @@ def test_tableau_follows_the_song_parts():
     assert all(s["transition"] == "cut" for s in chorus)  # hard cuts in a chorus
     assert [s["role"] for s in chorus][:4] == ["insert", "wide", "insert", "wide"]
     assert chorus[0]["start"] == 25.0 and chorus[0]["end"] - chorus[0]["start"] >= 3.0  # partial bar joined
-    sb = storyboard.replan(a, None, "", "tableau")
+    sb = storyboard.replan(a, None, "", "journey")
     prompt = storyboard.director_prompt(sb, [shots[0]["id"]], "", None, "")
-    assert animation.ANIMATIONS["tableau"]["motion"] in prompt and "| role: insert" in prompt
+    assert animation.ANIMATIONS["journey"]["motion"] in prompt and "| role: insert" in prompt
     plain = storyboard.replan(a, None, "")
     assert "living illustration" not in storyboard.director_prompt(plain, [shots[0]["id"]], "", None, "")
 

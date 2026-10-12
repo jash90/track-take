@@ -9,7 +9,11 @@ export const DEFAULT_ANIMATION: AnimationId = "stopmotion";
 export const ANIMATIONS: { value: AnimationId; label: Key; hint: Key }[] = [
   { value: "stopmotion", label: "anim.stopmotion", hint: "anim.stopmotionHint" },
   { value: "tableau", label: "anim.tableau", hint: "anim.tableauHint" },
+  { value: "journey", label: "anim.journey", hint: "anim.journeyHint" },
 ];
+
+/** Living-picture styles: smooth playback, no beat pump. */
+export const isIllustrated = (a: AnimationId) => a === "tableau" || a === "journey";
 
 const known = (v: unknown): v is AnimationId => ANIMATIONS.some((a) => a.value === v);
 
@@ -36,11 +40,17 @@ export function useAnimationName() {
   };
 }
 
-/** Tiny glyph: three frames (stop-motion) or a framed landscape (living illustration). */
+/** Tiny glyph: three frames (stop-motion), a framed landscape (living illustration) or a road (illustrated journey). */
 export function AnimationGlyph({ animation, className }: { animation: AnimationId; className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 14 10" width={14} height={10} className={cx("shrink-0", className)} fill="none" stroke="currentColor" strokeWidth={1.4}>
-      {animation === "tableau" ? (
+      {animation === "journey" ? (
+        <>
+          <rect x={0.7} y={0.7} width={12.6} height={8.6} rx={1} />
+          <path d="M2 8.5 C 5 6, 9 6, 12 2" strokeLinecap="round" />
+          <path d="M9.6 2 L12 2 L12 4.4" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : animation === "tableau" ? (
         <>
           <rect x={0.7} y={0.7} width={12.6} height={8.6} rx={1} />
           <path d="M1.5 8 L5 4.5 L7.5 6.8 L9.5 5 L12.5 8" strokeLinejoin="round" />

@@ -5,8 +5,10 @@ export type KeySet = "codex" | "comfy";
 export type Orientation = "landscape" | "portrait";
 export type FormatName = "16x9" | "9x16";
 /** How the video moves: stopmotion = continuous takes "on twos" with beat pump/shake; tableau = "living illustration",
- * every shot its own calm tableau cut on the bar, smooth playback, whip pans inside a section, hard cuts at section starts. */
-export type AnimationId = "stopmotion" | "tableau";
+ * every shot its own calm tableau cut on the bar, smooth playback, whip pans inside a section, hard cuts at section starts;
+ * journey = "illustrated journey", the same pictures on the rhythm of animated videos: a travelling intro, whip-panned
+ * verses, choruses of short inserts and long wide shots on hard cuts. */
+export type AnimationId = "stopmotion" | "tableau" | "journey";
 export interface AnimationInfo {
   id: AnimationId;
   name: { pl: string; en: string };
@@ -20,7 +22,7 @@ export interface ProjectSettings {
   max_dph: number; // USD per hour cap per GPU (a host with N GPUs may cost up to N × max_dph)
   captions: boolean; // karaoke lyrics burned into the video (default true)
   region?: string; // "US" (default) | "US,CA" | "any" | comma list of country codes; falls back to anywhere when no offer
-  beat_motion: boolean; // camera pump on downbeats + shake on snares (default true); no effect with animation "tableau"
+  beat_motion: boolean; // camera pump on downbeats + shake on snares (default true); no effect with animation "tableau" / "journey"
   animation?: AnimationId; // default "stopmotion"; changing it on a planned storyboard needs a re-plan
 }
 

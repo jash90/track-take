@@ -1,7 +1,7 @@
 import type { Project, ProjectSettings } from "../../api/types";
 import { useT, type Key } from "../../i18n";
 import { cx } from "../../lib/cx";
-import { projectAnimation } from "../../lib/animation";
+import { isIllustrated, projectAnimation } from "../../lib/animation";
 import { useSaveSettings } from "./useSaveSettings";
 
 type Flag = "captions" | "beat_motion";
@@ -14,7 +14,7 @@ const OPTIONS: { flag: Flag; label: Key; hint: Key }[] = [
 export const flagOn = (s: Partial<ProjectSettings>, f: Flag) => s[f] !== false;
 
 /** Whether the flag actually takes effect: the living-illustration montage never pumps/shakes to the beat. */
-export const flagApplies = (p: Pick<Project, "settings">, f: Flag) => f !== "beat_motion" || projectAnimation(p) !== "tableau";
+export const flagApplies = (p: Pick<Project, "settings">, f: Flag) => f !== "beat_motion" || !isIllustrated(projectAnimation(p));
 
 /** Captions / beat-motion switches; saved immediately (optimistic PATCH of project settings). */
 export function RenderOptions({ project }: { project: Project }) {
