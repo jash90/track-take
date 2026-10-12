@@ -89,8 +89,9 @@ echo "== start $GPUS ComfyUI on 127.0.0.1:$PORT.."
 for i in $(seq 0 $((GPUS - 1))); do
   p=$((PORT + i))
   if ! curl -sf "http://127.0.0.1:$p/system_stats" >/dev/null; then
+    # each instance needs its own database: ComfyUI refuses to start on one another instance already uses
     CUDA_VISIBLE_DEVICES=$i setsid nohup "$PY" main.py --listen 127.0.0.1 --port "$p" --disable-auto-launch \
-      > "/workspace/comfyui_$i.log" 2>&1 < /dev/null &
+      --database-url "sqlite:////workspace/comfyui_$i.db" > "/workspace/comfyui_$i.log" 2>&1 < /dev/null &
   fi
 done
 for _ in $(seq 1 120); do

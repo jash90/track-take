@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from tracktake import nethistory
 from tracktake.config import REPO_ROOT, STATE_DIR, VastSettings
 
 SETUP_SCRIPT = REPO_ROOT / "comfy" / "provisioning" / "vast_setup.sh"
@@ -58,13 +59,21 @@ class Offer:
     location: str
     download_cost: float = 0.0  # USD per GB
     gpus: int = 1
+    machine_id: int = 0
+    host_id: int = 0
+    ram_gb: float = 0.0
+
+    @property
+    def country(self) -> str:
+        return country_of(self.location)
 
     @classmethod
     def from_raw(cls, o: dict) -> Offer:
         return cls(int(o["id"]), str(o.get("gpu_name", "")), float(o.get("dph_total", 0.0)),
                    float(o.get("reliability2", o.get("reliability", 0.0))), float(o.get("inet_down", 0.0)),
                    float(o.get("disk_space", 0.0)), str(o.get("geolocation", "")),
-                   float(o.get("inet_down_cost", 0.0) or 0.0), int(o.get("num_gpus", 1) or 1))
+                   float(o.get("inet_down_cost", 0.0) or 0.0), int(o.get("num_gpus", 1) or 1),
+                   int(o.get("machine_id") or 0), int(o.get("host_id") or 0), float(o.get("cpu_ram") or 0) / 1024)
 
     def setup_cost(self, download_gb: float) -> float:
         """USD to download the models onto this host (billed per GB on top of the hourly price)."""
@@ -114,15 +123,26 @@ def offer_query(s: VastSettings) -> str:
             f"inet_down_cost<={s.max_download_cost}")  # >=12.4 returns nothing for RTX 5090 (API quirk); Blackwell needs 12.8 anyway
 
 
+RAM_PER_GPU_GB = 32  # each GPU runs its own ComfyUI, which stages ~30 GB of Wan weights in RAM
 MIN_VRAM_GB = 24  # Wan 2.2 14B fp8 with its text encoder needs ~22 GB of VRAM
 DLPERF_4090 = 92.0  # Vast's median DLPerf per RTX 4090, the card the clip timings were measured on
+
+
+def country_of(location: str) -> str:
+    """'North Carolina, US' -> 'US'."""
+    return location.rsplit(",", 1)[-1].strip().upper() if location else ""
+
+
+def in_regions(location: str, s: VastSettings) -> bool:
+    return not s.regions or country_of(location) in {r.upper() for r in s.regions}
 
 
 def matches(o: dict, s: VastSettings) -> bool:
     """The host filters of offer_query, applied to a raw offer (GPU model and count aside)."""
     return (o.get("direct_port_count", 0) >= 1 and o.get("reliability2", o.get("reliability", 0)) > s.min_reliability
             and o.get("inet_down", 0) > s.min_inet_down and o.get("disk_space", 0) >= s.disk_gb
-            and (o.get("cuda_max_good") or 0) >= 13.0 and (o.get("inet_down_cost") or 0) <= s.max_download_cost)
+            and (o.get("cuda_max_good") or 0) >= 13.0 and (o.get("inet_down_cost") or 0) <= s.max_download_cost
+            and (not o.get("cpu_ram") or o["cpu_ram"] / 1024 >= RAM_PER_GPU_GB * max(1, int(o.get("num_gpus") or 1)) * 0.95))
 
 
 def gpu_catalog(s: VastSettings, speeds: dict[str, float], run: Runner = run_cli) -> list[dict]:
@@ -138,6 +158,8 @@ def gpu_catalog(s: VastSettings, speeds: dict[str, float], run: Runner = run_cli
     for label, offers in groups.items():
         key = label.replace(" ", "_")
         good = [o for o in offers if matches(o, s)]
+        near = [o for o in good if in_regions(str(o.get("geolocation", "")), s)]
+        good = near or good  # same fallback as search_offers: the region first, anywhere when it has none
         per_gpu = sorted(o["dph_total"] / max(1, o["num_gpus"]) for o in (good or offers))
         dlperf = sorted(o.get("dlperf", 0) / max(1, o["num_gpus"]) for o in offers)[len(offers) // 2]
         hosts: dict[int, list[float]] = {}
@@ -147,7 +169,7 @@ def gpu_catalog(s: VastSettings, speeds: dict[str, float], run: Runner = run_cli
         cc = max(int(o.get("compute_cap") or 0) for o in offers)  # 800 = Ampere; older cards lack fast fp8/bf16 paths
         speed = speeds[key] if key in speeds else (dlperf / DLPERF_4090) ** 0.7 if dlperf else 0.0
         out.append({
-            "gpu": key, "label": label, "vram_gb": vram, "suitable": vram >= MIN_VRAM_GB and cc >= 800,
+            "gpu": key, "label": label, "in_region": bool(near), "vram_gb": vram, "suitable": vram >= MIN_VRAM_GB and cc >= 800,
             "offers": len(offers), "matching": len(good),
             "min_dph_per_gpu": round(per_gpu[0], 3), "median_dph_per_gpu": round(per_gpu[len(per_gpu) // 2], 3),
             "hosts": [{"gpus": n, "offers": len(p), "min_dph": round(min(p), 3)} for n, p in sorted(hosts.items())],
@@ -174,9 +196,20 @@ def search_offers(s: VastSettings, run: Runner = run_cli, limit: int = 5) -> lis
         if run is run_cli:
             _SEARCH_CACHE[key] = (time.monotonic(), raw)
     offers = [Offer.from_raw(o) for o in raw]
-    ok = [o for o in offers if o.dph <= s.max_dph * max(1, s.gpus) and o.download_cost <= s.max_download_cost]
-    # cheapest for a ~1 h job including the model download
-    return sorted(ok, key=lambda o: o.dph + o.setup_cost(s.download_gb))[:limit]
+    ok = [o for o in offers if o.dph <= s.max_dph * max(1, s.gpus) and o.download_cost <= s.max_download_cost
+          and (not o.ram_gb or o.ram_gb >= RAM_PER_GPU_GB * max(1, o.gpus) * 0.95)]
+    # preferred regions first (the model download is the slowest part of a worker's start); anywhere as a fallback
+    near = [o for o in ok if in_regions(o.location, s)]
+    return sorted(near or ok, key=lambda o: offer_cost(o, s))[:limit]
+
+
+def offer_cost(o: Offer, s: VastSettings) -> float:
+    """What picking this host costs beyond the work itself: an hour of its price (a ~1 h job), the download fee,
+    the paid minutes spent waiting for the models at the speed expected from this host or its region, and a
+    penalty for hosts that failed to start before."""
+    hist = nethistory.history()
+    wait_h = s.download_gb * 1000 / max(hist.expected_mb_s(o.machine_id, o.location), 1.0) / 3600
+    return o.dph + o.setup_cost(s.download_gb) + o.dph * wait_h + nethistory.FAIL_PENALTY_USD * hist.fails(o.machine_id)
 
 
 def create(offer: Offer, s: VastSettings, run: Runner = run_cli, name: str = "main", local_port: int = 0) -> State:
@@ -278,9 +311,14 @@ def close_tunnel(state: State) -> None:
 
 
 def destroy(state: State, run: Runner = run_cli) -> float:
-    """Stop billing. Returns the approximate cost of the session in USD."""
+    """Stop billing. Returns the approximate cost of the session in USD. An instance that is already gone (destroyed
+    by another path, or by Vast) counts as destroyed: cleanup must never stop half-way and orphan the next card."""
     close_tunnel(state)
-    run(["destroy", "instance", str(state.instance_id), "-y"])
+    try:
+        run(["destroy", "instance", str(state.instance_id), "-y"])
+    except VastError as e:
+        if "not found" not in str(e).lower() and "404" not in str(e):
+            raise
     hours = (time.time() - state.created_at) / 3600 if state.created_at else 0.0
     state_path(state.name).unlink(missing_ok=True)
     return hours * state.dph
@@ -342,6 +380,7 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
         name, port = f"{prefix}w{slot + 1}", s.local_port + 1 + slot  # prefix: concurrent jobs never share names
         while offer is not None:
             try:
+                started = time.monotonic()
                 st = create(offer, s, run=run, name=name, local_port=port)
             except VastError as e:  # offer taken meanwhile, or a refused contract: next spare
                 log(f"{name}: offer {offer.id} refused ({e})")
@@ -358,6 +397,7 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
                 if s.models and s.min_download_mbs > 0:
                     speed = download_speed(st, s)
                     log(f"{name}: Hugging Face download {speed:.0f} MB/s on offer {offer.id}")
+                    nethistory.record(offer, speed, ssh_s=round(time.monotonic() - started))
                     if speed < s.min_download_mbs:
                         host_fault = True
                         raise SlowHost(f"{speed:.0f} MB/s < {s.min_download_mbs:.0f} MB/s")
@@ -372,7 +412,13 @@ def rent_fleet(count: int, s: VastSettings, run: Runner = run_cli, log=print, sp
                 log(f"{name}: ready (ssh root@{st.ssh_host} -p {st.ssh_port})")
                 return
             except Exception as e:  # noqa: BLE001 - a broken or slow worker is destroyed; the slot may retry
-                cost = destroy(st, run=run)
+                if host_fault and not isinstance(e, SlowHost):  # never started / no SSH: remember the host
+                    nethistory.record(offer, error=str(e))
+                try:
+                    cost = destroy(st, run=run)
+                except Exception as gone:  # noqa: BLE001 - the job's final cleanup retries every saved state
+                    log(f"{name}: could not free {st.instance_id}: {gone}")
+                    cost = 0.0
                 log(f"{name}: failed ({e}); destroyed (~${cost:.2f})")
                 with lock:
                     retry = (host_fault or isinstance(e, SlowHost)) and not give_up.is_set()

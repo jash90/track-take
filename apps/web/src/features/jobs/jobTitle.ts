@@ -1,5 +1,6 @@
-import type { Job } from "../../api/types";
+import type { AutopilotStage, Job } from "../../api/types";
 import type { TFn } from "../../i18n";
+import { keysCountSummary } from "../keys/stale";
 
 const num = (v: unknown): number | null => {
   const n = typeof v === "string" ? Number(v) : v;
@@ -8,7 +9,7 @@ const num = (v: unknown): number | null => {
 const setName = (v: unknown) => (v === "comfy" ? "ComfyUI" : v === "codex" ? "Codex" : typeof v === "string" ? v : null);
 
 /** Localised job title from kind + params; the backend `title` is only an English fallback. */
-const STAGES = ["analyze", "plan", "write", "character", "keys", "render"] as const;
+const STAGES = ["analyze", "plan", "write", "review", "character", "keys", "check", "render"] as const satisfies readonly AutopilotStage[];
 export type Stage = (typeof STAGES)[number];
 export const isStage = (v: unknown): v is Stage => typeof v === "string" && (STAGES as readonly string[]).includes(v);
 
@@ -31,10 +32,15 @@ export function jobTitle(job: Pick<Job, "kind" | "params"> & { progress?: Job["p
       return t("job.character");
     case "keys_codex": {
       const missing = num(p.missing);
+      const stale = num(p.stale);
+      if (stale) return t("job.keys.detail", { detail: keysCountSummary(t, missing ?? 0, stale) });
       if (missing !== null) return t("job.keys.missing", { count: missing });
       const shots = num(p.shots);
       return shots !== null ? t("job.keys.shots", { count: shots }) : t("job.keys");
     }
+    case "keys_check":
+      // params {redraw}: false = only flip mirrored frames and leave correction notes
+      return (p.redraw as unknown) === false ? t("job.keysCheck.noRedraw") : t("job.keysCheck");
     case "render": {
       const set = setName(p.set);
       const workers = num(p.workers);

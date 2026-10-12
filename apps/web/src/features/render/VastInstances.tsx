@@ -48,15 +48,24 @@ export function VastInstances({ instances }: { instances: VastInstance[] }) {
       <ul className="flex flex-col gap-1.5">
         {instances.map((i) => (
           <li key={i.id} className="rounded-md border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-[0.75rem]">
-            <div className="flex items-center gap-3">
-              <span className={cx("h-1.5 w-1.5 shrink-0 rounded-full", i.in_use ? "animate-pulse-dot bg-safe" : "bg-ink-400")} />
-              <span className="truncate text-ink-200" title={i.name || `#${i.id}`}>{i.gpu}</span>
-              <span className="ml-auto text-ink-300">{i.status}</span>
-              <span className="text-ink-100">{formatUsd(i.dph, 3)}/h</span>
+            <div className="flex items-start gap-3">
+              <span className={cx("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", i.in_use ? "animate-pulse-dot bg-safe" : "bg-ink-400")} />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-ink-100" title={i.name || `#${i.id}`}>
+                  {i.gpus ?? 1}× {i.gpu}
+                  {i.location && <span className="text-ink-400"> · {i.location}</span>}
+                </span>
+                <span className="text-ink-400">
+                  {i.status} ·{" "}
+                  <span className="text-ink-100" title={t("vastInst.perMachineTip")}>
+                    {t("vastInst.perMachine", { usd: formatUsd(i.dph, 3) })}
+                  </span>
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setTarget(i)}
-                className="rounded border border-err/50 px-2 py-0.5 font-sans text-[0.72rem] text-err hover:border-err hover:bg-err/10"
+                className="shrink-0 rounded border border-err/50 px-2 py-0.5 font-sans text-[0.72rem] text-err hover:border-err hover:bg-err/10"
               >
                 {t("vastInst.release")}
               </button>

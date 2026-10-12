@@ -2,7 +2,8 @@ import type { PresetChoice, RenderPreset, RenderPresetId, RenderPresets } from "
 import { Spinner } from "../../components/ui";
 import { useT, type Key } from "../../i18n";
 import { cx } from "../../lib/cx";
-import { formatUsd } from "../../lib/format";
+import { formatUsd, timeRange } from "../../lib/format";
+import { regionLine } from "../render/region";
 
 const NAMES: Record<RenderPresetId, Key> = {
   cheapest: "preset.cheapest",
@@ -17,7 +18,7 @@ export function suggestedBudget(usd: number): number {
 
 export function presetLines(p: RenderPreset, t: ReturnType<typeof useT>): [string, string] {
   return [
-    t("preset.time", { min: Math.round(p.minutes), usd: formatUsd(p.usd) }),
+    t("preset.time", { time: timeRange(p.minutes, p.minutes_max), usd: formatUsd(p.usd) }),
     t("preset.cards", { count: p.workers * p.gpus, gpu: p.label || p.gpu.replace(/_/g, " ") }),
   ];
 }
@@ -32,6 +33,8 @@ interface Props {
   onCustom: () => void;
   /** short line under "Custom", e.g. the saved card */
   customHint?: string;
+  /** project rental region, shown as one line under the cards */
+  region?: string;
   /** live /estimate price for the saved settings, when known */
   customPrice?: string;
   disabled?: boolean;
@@ -44,7 +47,7 @@ const card = (on: boolean) =>
   );
 
 /** The plain-language render options (cheapest / recommended / fastest) plus "Custom". */
-export function PresetCards({ data, loading, selected, onSelect, onCustom, customHint, customPrice, disabled }: Props) {
+export function PresetCards({ data, loading, selected, onSelect, onCustom, customHint, customPrice, region, disabled }: Props) {
   const t = useT();
   const presets = data?.presets ?? [];
   const custom = (
@@ -85,7 +88,10 @@ export function PresetCards({ data, loading, selected, onSelect, onCustom, custo
         })}
         {custom}
       </div>
-      {data?.estimated_clips && <p className="text-[0.72rem] text-ink-500">{t("preset.estimated")}</p>}
+      <p className="text-[0.72rem] text-ink-500">
+        {regionLine(region, t)}
+        {data?.estimated_clips ? ` · ${t("preset.estimated")}` : ""}
+      </p>
     </div>
   );
 }

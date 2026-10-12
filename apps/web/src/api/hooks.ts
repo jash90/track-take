@@ -70,8 +70,8 @@ export function useSetup(enabled = true) {
   return useQuery({ queryKey: qk.setup, queryFn: api.setup, enabled, staleTime: 30_000, retry: 1 });
 }
 
-export function useVastGpus() {
-  return useQuery({ queryKey: qk.vastGpus, queryFn: api.vastGpus, staleTime: 5 * 60_000, retry: 1 });
+export function useVastGpus(region?: string) {
+  return useQuery({ queryKey: qk.vastGpus(region), queryFn: () => api.vastGpus(region), staleTime: 5 * 60_000, retry: 1 });
 }
 
 export function useVast(poll = false) {
@@ -106,4 +106,9 @@ export function useStartJob<TVars>(projectId: string, fn: (vars: TVars) => Promi
       onStarted?.(job);
     },
   });
+}
+
+/** POST keys/check: the vision model's keyframe continuity check (flips mirrored frames, redraws wrong ones). */
+export function useCheckKeys(projectId: string, onStarted?: (job: Job) => void) {
+  return useStartJob(projectId, (redraw: boolean = true) => api.checkKeys(projectId, redraw), onStarted);
 }

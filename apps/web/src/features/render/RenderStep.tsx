@@ -6,7 +6,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/Toaster";
 import { Button, InlineError, StepHeader } from "../../components/ui";
 import { cx } from "../../lib/cx";
-import { formatMinutes, formatUsd } from "../../lib/format";
+import { formatUsd, machineSummary, timeRange, timeRoomy } from "../../lib/format";
 import { useDebounced } from "../../lib/useDebounced";
 import { activeJob, useWorkspace } from "../workspace/context";
 import { FormatBadge, formatRatio, orientationInfo, projectFormat, projectOrientation } from "../../lib/orientation";
@@ -50,12 +50,18 @@ export function RenderStep() {
   const running = activeJob(jobs, "render");
   const lastRender = running ?? jobs.find((j) => j.kind === "render");
   const e = est.data && est.data.set === set ? est.data : undefined;
-  const blockedByKeys = set === "codex" && (e?.missing_keys ?? 0) > 0;
+  const missingKeys = set === "codex" ? (e?.missing_keys ?? 0) : 0;
+  const staleKeys = set === "codex" ? (e?.stale_keys ?? 0) : 0;
+  // missing keyframes block the render; stale ones only warn (the render would use the old images)
+  const blockedByKeys = missingKeys > 0;
+  // the keyframe check redraws the frames it flags, so it counts as drawing too
+  const keysJob = activeJob(jobs, "keys_codex", "keys_check");
   const configured = !!vast.data?.configured;
   const balance = vast.data?.balance;
   // a preset card shows its own price — the button and the confirm must say the same; "Custom" uses /estimate
   const shownUsd = choice !== "custom" && preset ? preset.usd : e && !e.no_offers ? e.usd : undefined;
   const shownMinutes = choice !== "custom" && preset ? preset.minutes : e?.minutes;
+  const shownMinutesMax = choice !== "custom" && preset ? preset.minutes_max : e?.minutes_max;
   const lowBalance = shownUsd !== undefined && typeof balance === "number" && balance < shownUsd;
 
   const render = useStartJob(
@@ -76,6 +82,11 @@ export function RenderStep() {
       openJobs();
     },
   );
+
+  const genKeys = useStartJob(project.id, () => api.codexKeys(project.id, {}), () => {
+    toast(t("keys.drawingToast"), "info");
+    openJobs();
+  });
 
   const disabledReason = !configured
     ? t("render.needKey")
@@ -127,7 +138,8 @@ export function RenderStep() {
                 saveSettings.mutate({ gpu: pr.gpu, gpus: pr.gpus, max_dph: pr.max_dph, workers: pr.workers });
               }}
               onCustom={() => setForceCustom(true)}
-              customHint={t("preset.customNow", { n: workers, gpu: `${gpus > 1 ? `${gpus}× ` : ""}${gpu.replace(/_/g, " ")}` })}
+              customHint={t("preset.customNow", { summary: machineSummary(t, workers, gpus, gpu) })}
+              region={project.settings.region}
               customPrice={choice === "custom" && e && !e.no_offers ? formatUsd(e.usd) : undefined}
             />
           </div>
@@ -143,10 +155,17 @@ export function RenderStep() {
             />
           )}
           <RenderOptions project={project} />
-          {blockedByKeys && e && (
-            <p role="alert" className="rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
-              {t("est.missing", { count: e.missing_keys })}
-            </p>
+          {(missingKeys > 0 || staleKeys > 0) && (
+            <div role="alert" className="flex flex-col gap-2.5 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-3 text-[0.85rem] text-warn">
+              {missingKeys > 0 && <p>{t("est.missing", { count: missingKeys })}</p>}
+              {staleKeys > 0 && <p>{t("render.staleKeys", { count: staleKeys })}</p>}
+              <Button size="sm" variant="secondary" className="w-fit" busy={!!keysJob || genKeys.isPending} onClick={() => genKeys.mutate(undefined)}>
+                {staleKeys > 0
+                  ? t("keys.genMissingStaleN", { count: missingKeys + staleKeys })
+                  : t("keys.genMissingN", { count: missingKeys })}
+              </Button>
+              <InlineError error={genKeys.error} />
+            </div>
           )}
           {choice === "custom" && e?.no_offers && (
             <p role="alert" className="rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
@@ -155,9 +174,12 @@ export function RenderStep() {
           )}
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" disabled={!!disabledReason} title={disabledReason} busy={render.isPending} onClick={() => setConfirm(true)}>
-              {shownUsd !== undefined ? t("render.buttonCost", { usd: formatUsd(shownUsd) }) : t("render.button")}
+              {shownUsd !== undefined ? t("render.buttonCost", { usd: formatUsd(shownUsd), time: shownMinutes !== undefined ? timeRange(shownMinutes, shownMinutesMax) : "—" }) : t("render.button")}
             </Button>
-            {disabledReason && <span className="text-[0.75rem] text-ink-500">{disabledReason}</span>}
+            <span className="font-mono text-[0.75rem] text-ink-300">
+              {choice !== "custom" && preset ? machineSummary(t, preset.workers, preset.gpus, preset.gpu) : machineSummary(t, workers, gpus, gpu)}
+            </span>
+            {disabledReason && <span className="text-[0.75rem] text-ink-500">· {disabledReason}</span>}
           </div>
 
           <details className="group rounded-lg border border-ink-700 bg-ink-900/40">
@@ -207,14 +229,18 @@ export function RenderStep() {
             </p>
             <ul className="font-mono text-[0.78rem] text-ink-300">
               <li>{t("render.lineFormat", { ratio, set: set === "codex" ? "Codex" : "ComfyUI", count: e.clips })}</li>
-              <li>{t("render.lineCards", { workers, gpus, gpu: gpu.replace(/_/g, " "), dph: formatUsd(maxDph) })}</li>
+              <li>
+                {choice !== "custom" && preset
+                  ? t("render.lineCards", { summary: machineSummary(t, preset.workers, preset.gpus, preset.gpu), dph: formatUsd(preset.max_dph) })
+                  : t("render.lineCards", { summary: machineSummary(t, workers, gpus, gpu), dph: formatUsd(maxDph) })}
+              </li>
               <li>
                 {t("render.lineOptions", {
                   captions: t(flagOn(project.settings, "captions") ? "renderOpts.on" : "renderOpts.off"),
                   beat: t(flagOn(project.settings, "beat_motion") ? "renderOpts.on" : "renderOpts.off"),
                 })}
               </li>
-              <li>{t("render.lineTime", { time: formatMinutes(shownMinutes ?? e.minutes), gb: e.models_gb })}</li>
+              <li>{t("render.lineTime", { time: timeRoomy(t, shownMinutes ?? e.minutes, shownMinutesMax ?? e.minutes_max), gb: e.models_gb })}</li>
               <li className={lowBalance ? "text-warn" : undefined}>
                 {t("render.lineBalance", { balance: formatUsd(balance) })}
                 {lowBalance ? t("render.lineBalanceLow") : ""}

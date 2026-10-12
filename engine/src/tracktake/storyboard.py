@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from itertools import pairwise
 from pathlib import Path
 
 from tracktake.models import Analysis
@@ -22,7 +23,24 @@ DEFAULT_STYLE = ("paper cut-out stop-motion animation, everything built from lay
                  "paper texture and soft shadows between the paper layers")
 
 
+MIN_SHOT_S = 5.0  # a clip needs time for its motion and for flowing into the next shot; 2 bars of a fast song
+                  # (~3.7 s at 130 BPM) made the animation look rushed
+TINY_SHOT_S = 3.0  # leftovers shorter than this join the previous shot
+
+
+def bars_per_shot(a: Analysis) -> int:
+    """2 bars per shot, doubled until a shot lasts at least MIN_SHOT_S (4 bars for fast songs, 8 for very fast)."""
+    downs = sorted(a.downbeats)
+    gaps = sorted(b - c for c, b in pairwise(downs) if b > c)
+    bar = gaps[len(gaps) // 2] if gaps else 2.0
+    step = 2
+    while step * bar < MIN_SHOT_S and step < 8:
+        step *= 2
+    return step
+
+
 def plan_shots(a: Analysis) -> list[dict]:
+    step = bars_per_shot(a)
     shots: list[dict] = []
     for s in a.sections:
         if s.end - s.start < 1.5 and shots and s.kind == "build":
@@ -30,12 +48,21 @@ def plan_shots(a: Analysis) -> list[dict]:
             shots[-1]["section"] += "+Build-Up"
             continue
         starts = sorted({round(s.start, 2)} | {round(d, 2) for d in a.downbeats if s.start + 0.3 < d < s.end - 0.3})
-        chunk = starts[0::2]
-        if len(starts) > 2 and len(starts) % 2 == 1:
-            chunk = chunk[:-1]
+        chunk = starts[0::step]
+        if len(chunk) > 1 and len(starts) - (len(chunk) - 1) * step <= step // 2:
+            chunk = chunk[:-1]  # a short leftover joins the section's last shot
         for i, c in enumerate(chunk):
             end = chunk[i + 1] if i + 1 < len(chunk) else round(s.end, 2)
             shots.append({"start": c, "end": end, "section": s.label, "kind": s.kind})
+    merged: list[dict] = []
+    for sh in shots:  # a very short section (or leftover) would flash by: it extends the shot before it
+        if merged and sh["end"] - sh["start"] < TINY_SHOT_S:
+            merged[-1]["end"] = sh["end"]
+            if sh["section"].split("+")[0] != merged[-1]["section"].split("+")[0]:
+                merged[-1]["section"] += "+" + sh["section"]
+            continue
+        merged.append(sh)
+    shots = merged
     for i, sh in enumerate(shots):
         sh["id"] = f"s{i + 1:02d}"
         sh["lines"] = [ln.text for ln in a.lines if sh["start"] - 0.4 <= ln.start < sh["end"] - 0.4]
@@ -90,12 +117,21 @@ RULES = """You are the director of a music video. Write, for each requested shot
 - scene: ONE complete picture for an image model (the whole frame: place, light, the character and what she does).
   Background and characters are one scene, never separate elements. 1-3 sentences, concrete and visual.
 - motion: what moves during the shot for an image-to-video model (character action, camera, light, weather). 1 sentence.
+  Pace it to the shot's length (given in seconds): under ~6 s only ONE small, slow change (a gentle push-in, a head
+  turn, a hand reaching); 6-10 s allow one bigger move. Never pack several actions or a long camera journey into a
+  short shot - the clip would look rushed.
 Rules:
 - Tell the song's story through visual metaphors of the lyrics sung in that shot; instrumental shots carry mood.
 - Recurring motifs and a few recurring locations make it feel like one film; vary framing (wide, medium, close-up).
 - When a shot has no person, do not mention people at all (image models add people for words like "couple").
 - Refer to the main character as "the woman" (or the given character) - her look is defined once in `heroine`.
 - No written text, letters, signs or captions in the image.
+- Screen directions: image models confuse a person's or vehicle's own left/right with the left/right of the picture.
+  Whenever a side matters (who sits where, who drives, which roadside has the lamps, which wall has the window), say
+  where it is IN THE FRAME for this camera angle: "seen from the front, the man at the wheel is on the right of the
+  frame and the woman on the left". Seen from the front, a car's or person's own left is on the RIGHT of the frame;
+  seen from behind, on the left. Keep the world's layout fixed across shots and work out the frame sides anew each
+  time the camera turns around.
 - Match the requested style and the cover art palette; energy follows the section (verses calmer, choruses bigger).
 - Keep the shot ids exactly as given; return only the requested shots.
 Continuity (most important - the video must not feel like a slideshow of separate pictures):
@@ -105,6 +141,8 @@ Continuity (most important - the video must not feel like a slideshow of separat
 - `scene` describes the exact picture at the START of the shot. The clip of the previous shot is animated to arrive
   exactly at that picture, so the previous shot's `motion` must lead naturally into it (e.g. previous motion "the
   camera slowly pushes in towards her hands on the window sill" -> this scene "close-up of her hands on the sill").
+- Keep the START pictures of consecutive CONTINUES shots close (similar framing, the same people in similar places):
+  the clip has only the shot's length to travel from one to the next, and a big difference looks like a fast morph.
 - Avoid big jumps inside a continuous run (no new location, no time-of-day change, no new costume, no new objects
   appearing from nowhere); save those for CUT shots. Gradual changes (camera travels, light slowly shifts, rain
   starts) are welcome.
@@ -114,7 +152,9 @@ World bible (so the same place and the same objects look identical in every shot
   model could otherwise change: room size and layout, where the window/door are, every piece of furniture with its
   KIND, SIZE and COLOUR ("a narrow single bed with a grey wool blanket against the left wall", not "a bed"), floor,
   walls, light sources. Exterior places likewise (street width, house shape, what is across the road).
-- `props`: objects that matter or recur (the coat, the two cups, the phone) with a fixed look and count.
+- `props`: objects that matter or recur (the coat, the two cups, the phone) with a fixed look and count. Every
+  OTHER recurring person (e.g. the male partner in a duet) is also a `props` entry with id like "man" and a `look`
+  that fixes face, hair, build and clothes exactly as for the main character; list that id in every shot he is in.
 - Every shot names its `location` id and the `props` ids visible in it; its `scene` must agree with those looks
   exactly - never resize, recolour, double or swap an object (a single bed stays single; two cups stay two unless the
   story removes one, and then the scene says so). Story changes of an object (the coat is taken off the hook) are
@@ -131,7 +171,7 @@ def bible_text(sb: dict) -> str:
 def director_prompt(sb: dict, shot_ids: list[str], song_style: str, cover: Path | None, lyrics: str,
                     instructions: str = "") -> str:
     shots = [s for s in sb["shots"] if s["id"] in shot_ids]
-    lines = [f"{s['id']} {s['start']:.1f}-{s['end']:.1f}s [{s['section']}] "
+    lines = [f"{s['id']} {s['start']:.1f}-{s['end']:.1f}s ({s['end'] - s['start']:.1f} s) [{s['section']}] "
              f"{'CUT' if is_cut(sb['shots'], i) else 'CONTINUES'} lyrics: {' / '.join(s['lines']) or '(instrumental)'}"
              + (f" | location: {s['location']}" if s.get("location") else "")
              + (f" | current scene: {s['scene']}" if s.get("scene") else "") for i, s in enumerate(sb["shots"])]
@@ -174,11 +214,12 @@ def write(sb: dict, shot_ids: list[str] | None, song_style: str, cover: Path | N
 
 
 def ask(prompt: str, cover: Path | None, timeout: float, log, schema: dict | None = None, key: str = "shots",
-        who: str = "director", shape: str = "") -> dict:
-    """Structured answer from the local claude CLI, or codex exec when claude is not installed."""
+        who: str = "director", shape: str = "", images: list[Path] | None = None) -> dict:
+    """Structured answer from the local claude CLI, or codex exec when claude is not installed. `images` are files
+    the prompt names by path (claude reads them, codex gets them attached)."""
     if shutil.which("claude"):
-        return _ask_claude(prompt, cover, timeout, log, schema or SCHEMA, key, who)
-    return _ask_codex(prompt, timeout, log, shape or DIRECTOR_SHAPE, who)
+        return _ask_claude(prompt, cover, timeout, log, schema or SCHEMA, key, who, images)
+    return _ask_codex(prompt, timeout, log, shape or DIRECTOR_SHAPE, who, images)
 
 
 DIRECTOR_SHAPE = ('{"heroine": str, "locations": [{"id", "name", "look"}], "props": [{"id", "name", "look"}], '
@@ -186,10 +227,10 @@ DIRECTOR_SHAPE = ('{"heroine": str, "locations": [{"id", "name", "look"}], "prop
 
 
 def _ask_claude(prompt: str, cover: Path | None, timeout: float, log, schema: dict = SCHEMA, key: str = "shots",
-                who: str = "director") -> dict:
+                who: str = "director", images: list[Path] | None = None) -> dict:
     cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema), "--allowedTools", "Read"]
-    if cover:
-        cmd += ["--add-dir", str(cover.parent.resolve())]
+    for folder in dict.fromkeys(f.parent.resolve() for f in [*([cover] if cover else []), *(images or [])]):
+        cmd += ["--add-dir", str(folder)]
     log(f"{who}: claude -p (structured output)")
     r = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout, check=False)
     if r.returncode != 0:
@@ -203,11 +244,14 @@ def _ask_claude(prompt: str, cover: Path | None, timeout: float, log, schema: di
     return data
 
 
-def _ask_codex(prompt: str, timeout: float, log, shape: str = DIRECTOR_SHAPE, who: str = "director") -> dict:
+def _ask_codex(prompt: str, timeout: float, log, shape: str = DIRECTOR_SHAPE, who: str = "director",
+               images: list[Path] | None = None) -> dict:
     log(f"{who}: codex exec (claude CLI not found)")
     full = prompt + f"\n\nAnswer with ONLY a JSON object: {shape}"
-    r = subprocess.run(["codex", "exec", "--skip-git-repo-check", "-s", "read-only"], input=full, capture_output=True,
-                       text=True, timeout=timeout, check=False)
+    cmd = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only"]
+    for image in images or []:
+        cmd += ["-i", str(image.resolve())]
+    r = subprocess.run(cmd, input=full, capture_output=True, text=True, timeout=timeout, check=False)
     if r.returncode != 0:
         raise RuntimeError(f"codex failed ({r.returncode}): {r.stderr[-800:]}")
     text = r.stdout

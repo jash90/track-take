@@ -12,7 +12,7 @@ import { Button, InlineError } from "../../components/ui";
 import { useT } from "../../i18n";
 import { PresetCards, suggestedBudget } from "./PresetCards";
 import { SetupChecklist } from "./SetupChecklist";
-import { formatUsd } from "../../lib/format";
+import { formatUsd, machineSummary } from "../../lib/format";
 
 export interface MakeVideoInitial {
   preset?: PresetChoice;
@@ -125,7 +125,8 @@ export function MakeVideoDialog({ open, onClose, project, initial }: Props) {
               setPreset("custom");
               setBudgetTouched(false);
             }}
-            customHint={t("preset.customNow", { n: workers, gpu: `${gpus > 1 ? `${gpus}× ` : ""}${gpu.replace(/_/g, " ")}` })}
+            customHint={t("preset.customNow", { summary: machineSummary(t, workers, gpus, gpu) })}
+            region={project.settings.region}
             customPrice={custom && est.data && !est.data.no_offers ? formatUsd(est.data.usd) : undefined}
           />
           {custom && (

@@ -10,18 +10,23 @@ import { jobTitle } from "./jobTitle";
 
 function keysFor(kind: JobKind, id: string): QueryKey[] {
   const common: QueryKey[] = [qk.project(id), qk.projects];
+  const estimate: QueryKey = ["project", id, "estimate"];
   switch (kind) {
     case "analyze":
       return [...common, qk.analysis(id), qk.peaks(id), qk.lyrics(id), qk.renderPresets(id)];
+    // new scene texts can make drawn keyframes stale
     case "storyboard":
-      return [...common, qk.storyboard(id), qk.renderPresets(id)];
+      return [...common, qk.storyboard(id), qk.renderPresets(id), qk.keys(id), estimate];
     case "continuity":
-      return [...common, qk.storyboard(id)];
+      return [...common, qk.storyboard(id), qk.keys(id), estimate];
     case "character":
-    case "keys_codex":
       return [...common, qk.keys(id)];
+    case "keys_codex":
+    // flips mirrored keyframes, leaves correction notes (stale) and redraws them
+    case "keys_check":
+      return [...common, qk.keys(id), estimate];
     case "render":
-      return [...common, qk.videos(id), qk.keys(id), qk.vast, ["project", id, "estimate"]];
+      return [...common, qk.videos(id), qk.keys(id), qk.vast, estimate];
     case "autopilot":
       return [
         ...common,
@@ -33,7 +38,7 @@ function keysFor(kind: JobKind, id: string): QueryKey[] {
         qk.videos(id),
         qk.vast,
         qk.renderPresets(id),
-        ["project", id, "estimate"],
+        estimate,
       ];
   }
 }
@@ -89,7 +94,11 @@ export function useJobWatcher(projectId: string, jobs: Job[]) {
           else if (job.status === "cancelled") toast(t("job.toast.cancelled", { title }), "info");
         } else if (isActive(job)) {
           if (job.kind === "autopilot" && stage !== prev.stage) refresh("autopilot");
-          const drawing = job.kind === "keys_codex" || job.kind === "character" || (job.kind === "autopilot" && (stage === "keys" || stage === "character"));
+          const drawing =
+            job.kind === "keys_codex" ||
+            job.kind === "keys_check" ||
+            job.kind === "character" ||
+            (job.kind === "autopilot" && (stage === "keys" || stage === "character" || stage === "check"));
           if (drawing && done !== prev.done) void qc.invalidateQueries({ queryKey: qk.keys(projectId) });
         }
       }

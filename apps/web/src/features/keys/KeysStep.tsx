@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { api, isNotFound } from "../../api/client";
-import { useKeys, useStartJob, useStoryboard } from "../../api/hooks";
+import { useCheckKeys, useKeys, useStartJob, useStoryboard } from "../../api/hooks";
 import type { KeySet, Shot } from "../../api/types";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
@@ -10,7 +10,9 @@ import { cx } from "../../lib/cx";
 import { activeJob, useWorkspace } from "../workspace/context";
 import { formatRatio, projectFormat, projectOrientation } from "../../lib/orientation";
 import { CharacterSheet } from "./CharacterSheet";
-import { KeyRow, SET_LABEL } from "./KeyRow";
+import { KeyCheckReport } from "./KeyCheckReport";
+import { KeyRow, SET_LABEL, keyRowId } from "./KeyRow";
+import { checkKinds, isStale, keysCountSummary } from "./stale";
 import { dependentShots, isCut } from "../../lib/continuity";
 import { Trans, useT } from "../../i18n";
 import { jobTitle } from "../jobs/jobTitle";
@@ -22,7 +24,7 @@ const VIEWS: { v: View; label: string | null }[] = [
   { v: "both", label: null },
 ];
 type ShotLike = Pick<Shot, "id" | "start" | "end" | "section" | "kind" | "lines" | "cut">;
-type Pending = { kind: "missing" } | { kind: "shot"; id: string } | { kind: "character" } | null;
+type Pending = { kind: "missing" } | { kind: "shot"; id: string } | { kind: "character" } | { kind: "check" } | null;
 
 export function KeysStep() {
   const { project, jobs, openJobs } = useWorkspace();
@@ -40,6 +42,7 @@ export function KeysStep() {
 
   const keysJob = activeJob(jobs, "keys_codex");
   const charJob = activeJob(jobs, "character");
+  const checkJob = activeJob(jobs, "keys_check");
   const sets: KeySet[] = view === "both" ? ["codex", "comfy"] : [view];
 
   const shots: ShotLike[] = useMemo(() => {
@@ -55,7 +58,12 @@ export function KeysStep() {
     }
     return c;
   }, [keysQ.data, shots, orientation]);
+  const staleCodex = useMemo(
+    () => shots.filter((s) => isStale(keysQ.data?.sets.codex?.[s.id], orientation)).length,
+    [keysQ.data, shots, orientation],
+  );
   const total = shots.length;
+  const issueKinds = useMemo(() => checkKinds(keysQ.data), [keysQ.data]);
 
   const { items, index } = useMemo(() => {
     const items: LightboxItem[] = [];
@@ -88,6 +96,9 @@ export function KeysStep() {
     return out;
   }, [shots]);
   const askRegen = useCallback((sid: string) => setPending({ kind: "shot", id: sid }), []);
+  const jumpTo = useCallback((sid: string) => {
+    document.getElementById(keyRowId(sid))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const started = () => {
     openJobs();
@@ -98,6 +109,10 @@ export function KeysStep() {
       toast(t("keys.drawingToast"), "info");
       started();
     });
+  const checkKeys = useCheckKeys(id, () => {
+    toast(t("keys.checkToast"), "info");
+    started();
+  });
   const genChar = useStartJob(id, (force: boolean) => api.character(id, force), () => {
     toast(t("keys.sheetToast"), "info");
     started();
@@ -111,12 +126,15 @@ export function KeysStep() {
       genKeys.mutate([pending.id]);
     }
     if (pending.kind === "character") genChar.mutate(!!keysQ.data?.character_sheet);
+    if (pending.kind === "check") checkKeys.mutate(true);
   };
 
   if (keysQ.isPending) return <Loading label={t("keys.loading")} />;
   if (keysQ.isError) return <ErrorBox error={keysQ.error} onRetry={() => void keysQ.refetch()} />;
 
   const missingCodex = Math.max(0, total - counts.codex);
+  // "generate" without shots draws the missing ones and redraws the stale ones
+  const toDraw = missingCodex + staleCodex;
 
   return (
     <div>
@@ -139,9 +157,21 @@ export function KeysStep() {
                 </button>
               ))}
             </div>
-            <Button variant="primary" busy={!!keysJob || genKeys.isPending} disabled={!sbQ.data || missingCodex === 0} onClick={() => setPending({ kind: "missing" })}
-              title={missingCodex === 0 ? t("keys.allDone") : undefined}>
-              {missingCodex > 0 ? t("keys.genMissingN", { count: missingCodex }) : t("keys.genMissing")}
+            <Button
+              busy={!!checkJob || checkKeys.isPending}
+              disabled={counts.codex === 0 || !!keysJob}
+              title={counts.codex === 0 ? t("keys.checkNoKeys") : undefined}
+              onClick={() => setPending({ kind: "check" })}
+            >
+              {t("keys.check")}
+            </Button>
+            <Button variant="primary" busy={!!keysJob || genKeys.isPending} disabled={!sbQ.data || toDraw === 0 || !!checkJob} onClick={() => setPending({ kind: "missing" })}
+              title={toDraw === 0 ? t("keys.allDone") : undefined}>
+              {staleCodex > 0
+                ? t("keys.genMissingStaleN", { count: toDraw })
+                : missingCodex > 0
+                  ? t("keys.genMissingN", { count: missingCodex })
+                  : t("keys.genMissing")}
             </Button>
           </>
         }
@@ -149,10 +179,17 @@ export function KeysStep() {
         <Trans k="keys.lead" values={{ ratio: <b className="text-ink-200">{ratio}</b> }} />{" "}
         <Chip tone={total && counts.codex >= total ? "ok" : "neutral"}>Codex {counts.codex}/{total}</Chip>{" "}
         <Chip tone={total && counts.comfy >= total ? "ok" : "neutral"}>ComfyUI {counts.comfy}/{total}</Chip>
+        {staleCodex > 0 && (
+          <>
+            {" "}
+            <Chip tone="warn" title={t("keys.staleTip")}>{keysCountSummary(t, missingCodex, staleCodex)}</Chip>
+          </>
+        )}
       </StepHeader>
-      <InlineError error={genKeys.error ?? genChar.error} />
+      <InlineError error={genKeys.error ?? genChar.error ?? checkKeys.error} />
 
       <div className="flex flex-col gap-5">
+        {keysQ.data.check && <KeyCheckReport check={keysQ.data.check} codex={keysQ.data.sets.codex} onJump={jumpTo} />}
         <CharacterSheet
           src={keysQ.data.character_sheet}
           busy={genChar.isPending}
@@ -163,14 +200,17 @@ export function KeysStep() {
         <Hint>
           <Trans k="keys.hint" values={{ comfy: <b>ComfyUI</b>, codex: <b>Codex</b> }} />
         </Hint>
-        {keysJob && (
-          <div className="rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-3">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span>{jobTitle(keysJob, t)}</span>
-              <span className="truncate font-mono text-[0.75rem] text-ink-400">{keysJob.message}</span>
-            </div>
-            {keysJob.progress && <ProgressBar className="mt-2" value={keysJob.progress.done} total={keysJob.progress.total} />}
-          </div>
+        {[keysJob, checkJob].map(
+          (job) =>
+            job && (
+              <div key={job.id} className="rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-3">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <span>{jobTitle(job, t)}</span>
+                  <span className="truncate font-mono text-[0.75rem] text-ink-400">{job.message}</span>
+                </div>
+                {job.progress && <ProgressBar className="mt-2" value={job.progress.done} total={job.progress.total} />}
+              </div>
+            ),
         )}
         {!sbQ.data && (!project.stage.storyboard || isNotFound(sbQ.error)) && <Empty title={t("sb.empty")}>{t("keys.noStoryboardBody")}</Empty>}
         {shots.length > 0 && (
@@ -184,6 +224,7 @@ export function KeysStep() {
                 sets={sets}
                 orientation={orientation}
                 keys={{ codex: keysQ.data.sets.codex?.[s.id], comfy: keysQ.data.sets.comfy?.[s.id] }}
+                issueKind={issueKinds[s.id]}
                 onOpen={openKey}
                 onRegenerate={askRegen}
                 regenerating={!!keysJob && regenShot === s.id}
@@ -197,13 +238,16 @@ export function KeysStep() {
 
       <ConfirmDialog
         open={pending !== null}
-        title={pending?.kind === "character" ? t("keys.sheet") : t("keys.genTitle")}
-        confirmLabel={t("keys.genConfirm")}
-        busy={genKeys.isPending || genChar.isPending}
+        title={pending?.kind === "character" ? t("keys.sheet") : pending?.kind === "check" ? t("keys.checkTitle") : t("keys.genTitle")}
+        confirmLabel={pending?.kind === "check" ? t("keys.checkConfirm") : t("keys.genConfirm")}
+        busy={genKeys.isPending || genChar.isPending || checkKeys.isPending}
         onConfirm={confirm}
         onClose={() => setPending(null)}
       >
-        {pending?.kind === "missing" && t("keys.genMissingBody", { count: missingCodex, ratio })}
+        {pending?.kind === "missing" &&
+          (staleCodex > 0
+            ? t("keys.genMissingStaleBody", { detail: keysCountSummary(t, missingCodex, staleCodex), ratio })
+            : t("keys.genMissingBody", { count: missingCodex, ratio }))}
         {pending?.kind === "shot" && (
           <>
             <Trans k="keys.regenBody" values={{ id: <b>{pending.id}</b>, ratio }} />
@@ -212,6 +256,12 @@ export function KeysStep() {
                 {t("keys.regenWarn", { ids: deps[pending.id]?.join(", ") ?? "" })}
               </span>
             )}
+          </>
+        )}
+        {pending?.kind === "check" && (
+          <>
+            {t("keys.checkBody")}
+            <span className="mt-3 block">{t("keys.checkBodyFix")}</span>
           </>
         )}
         {pending?.kind === "character" && (keysQ.data.character_sheet

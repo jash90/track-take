@@ -1,7 +1,7 @@
 import type { Estimate, Project } from "../../api/types";
 import { Hint, Spinner } from "../../components/ui";
 import { useT } from "../../i18n";
-import { formatMinutes, formatUsd } from "../../lib/format";
+import { formatUsd, timeRange } from "../../lib/format";
 import { EstimatePanel } from "./EstimatePanel";
 import { GpuSettings } from "./GpuSettings";
 import { MachinesSlider } from "./MachinesSlider";
@@ -24,14 +24,14 @@ export function CustomRender({ project, workers, onWorkers, onWorkersCommit, est
   const hasShots = project.stage.shots > 0;
   return (
     <div className="flex flex-col gap-5 rounded-xl border border-ink-700 bg-ink-900/40 p-4">
-      <GpuSettings project={project} />
+      <GpuSettings project={project} onWorkersReset={onWorkers} />
       <MachinesSlider value={workers} onChange={onWorkers} onCommit={onWorkersCommit} />
       {compact ? (
         !hasShots ? (
           <p className="text-[0.78rem] text-ink-400">{t("preset.customNoStoryboard")}</p>
         ) : estimate && !estimate.no_offers ? (
           <p className="font-mono text-[0.82rem] text-ink-200">
-            {t("preset.customEstimate", { usd: formatUsd(estimate.usd), time: formatMinutes(estimate.minutes) })}
+            {t("preset.customEstimate", { usd: formatUsd(estimate.usd), time: timeRange(estimate.minutes, estimate.minutes_max) })}
             {estimating && <Spinner small className="ml-2" />}
           </p>
         ) : estimate?.no_offers ? (

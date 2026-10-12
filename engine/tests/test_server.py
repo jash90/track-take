@@ -149,3 +149,15 @@ def test_release_one_card_respects_running_render(client, monkeypatch):
     assert r.status_code == 409 and "0123456789ab" in r.json()["detail"] and freed == []
     assert client.post("/api/vast/instances/2/down").json()["freed"] == 2 and freed == [2]
     assert client.post("/api/vast/instances/1/down?force=true").status_code == 200 and freed == [2, 1]
+
+
+def test_fast_songs_get_longer_shots():
+    downs = [round(i * 1.85, 2) for i in range(40)]  # ~130 BPM: two bars would be 3.7 s
+    a = Analysis(audio_sha256="x", duration=74.0, sample_rate=44100, bpm=130,
+                 beats=[round(i * 0.4625, 3) for i in range(160)], downbeats=downs,
+                 sections=[Section(label="Verse 1", kind="verse", start=0.0, end=37.0),
+                           Section(label="Chorus", kind="chorus", start=37.0, end=74.0)], lines=[])
+    assert storyboard.bars_per_shot(a) == 4
+    shots = storyboard.plan_shots(a)
+    assert all(s["end"] - s["start"] >= storyboard.MIN_SHOT_S for s in shots)
+    assert storyboard.bars_per_shot(analysis()) == 2  # 3 s bars: two bars already last 6 s

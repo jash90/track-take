@@ -22,7 +22,9 @@ function initialLang(): Lang {
 
 /** Plain translate for code outside React (uses the active language). */
 export function translate(lang: Lang, key: Key, params?: Params): string {
-  return render(DICTS[lang][key], lang, params);
+  // keys built at runtime (job kinds, autopilot stages) may be unknown to an older build: show the key, don't crash
+  const entry = DICTS[lang][key] ?? DICTS.en[key];
+  return entry === undefined ? String(key) : render(entry, lang, params);
 }
 
 interface I18nValue {

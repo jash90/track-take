@@ -259,6 +259,11 @@ function GpuOption({ id, idx, g, active, selected, cheapest, reason, locale, t, 
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-[0.92rem] text-ink-100">{g.label}</span>
         <span className="shrink-0 font-mono text-[0.68rem] text-ink-500">{t("gpu.vram", { gb: g.vram_gb })}</span>
+        {g.in_region === false && g.suitable && (
+          <span title={t("region.outsideTip")} className="shrink-0 rounded-full border border-warn/50 bg-warn/10 px-2 py-px font-mono text-[0.6rem] text-warn">
+            {t("region.outside")}
+          </span>
+        )}
         {cheapest && (
           <span className="shrink-0 rounded-full border border-ok/50 bg-ok/10 px-2 py-px font-mono text-[0.6rem] text-ok">
             {t("gpu.cheapestVideo")}

@@ -1,6 +1,6 @@
 import type { Estimate } from "../../api/types";
 import { ErrorBox, Spinner } from "../../components/ui";
-import { formatMinutes, formatUsd } from "../../lib/format";
+import { formatUsd, timeRange } from "../../lib/format";
 import { useI18n } from "../../i18n";
 import { formatSpeed } from "./GpuPicker";
 
@@ -15,7 +15,7 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink-700 bg-ink-700 sm:grid-cols-4">
         {[
           { k: t("est.cost"), v: e.no_offers ? "—" : formatUsd(e.usd), big: true },
-          { k: t("est.time"), v: e.no_offers ? "—" : formatMinutes(e.minutes) },
+          { k: t("est.time"), v: e.no_offers ? "—" : timeRange(e.minutes, e.minutes_max) },
           { k: t("est.clips"), v: String(e.clips) },
           { k: t("est.models"), v: `${e.models_gb} GB` },
         ].map((x) => (
@@ -31,6 +31,12 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
           · {e.speed_measured ? t("est.speedMeasured") : t("est.speedEst")}
         </span>
       </p>
+      {!e.no_offers && e.minutes_max !== undefined && (
+        <p className="mt-1 flex gap-1.5 text-[0.72rem] leading-relaxed text-ink-500">
+          <span aria-hidden>ⓘ</span>
+          <span>{t("time.hint")}</span>
+        </p>
+      )}
       {e.no_offers && (
         <div role="alert" className="mt-3 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
           {t("est.noMatch", { gpu: (e.gpu ?? "").replace(/_/g, " "), gpus: e.gpus ?? 1, dph: formatUsd(e.max_dph) })}
@@ -45,7 +51,7 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
               return (
                 <div key={a.workers}
                   className={`rounded-lg border px-3 py-2 font-mono text-[0.75rem] ${a.workers === e.workers ? "border-safe/60 text-ink-100" : "border-ink-700 text-ink-300"}`}>
-                  {t("est.cards", { count: a.workers })} · {formatMinutes(a.minutes)} · <span className="tabular">{formatUsd(a.usd)}</span>
+                  {t("est.cards", { count: a.workers })} · {timeRange(a.minutes, a.minutes_max)} · <span className="tabular">{formatUsd(a.usd)}</span>
                   {a.usd === cheapest && <span className="ml-1.5 text-ok">{t("est.cheapest")}</span>}
                 </div>
               );
@@ -57,6 +63,11 @@ export function EstimatePanel({ estimate, loading, error, ready }: { estimate: E
       {e.missing_keys > 0 && (
         <div role="alert" className="mt-3 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
           {t("est.missing", { count: e.missing_keys })}
+        </div>
+      )}
+      {(e.stale_keys ?? 0) > 0 && (
+        <div className="mt-3 rounded-lg border border-warn/40 bg-warn/[0.07] px-4 py-2.5 text-[0.85rem] text-warn">
+          {t("render.staleKeys", { count: e.stale_keys })}
         </div>
       )}
       <div className="mt-5">

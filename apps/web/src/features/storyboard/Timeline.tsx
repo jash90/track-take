@@ -27,14 +27,19 @@ interface TimelineProps {
   onPick: (id: string, additive: boolean) => void;
   /** location id -> name, shown in the shot tooltip */
   locationNames?: Record<string, string>;
+  /** "follow" toggle — owned by the parent so the editor can follow the playhead too */
+  follow: boolean;
+  onFollow: (on: boolean) => void;
   thumbs: Record<string, string | null>;
+  /** shots whose Codex keyframe is outdated (amber dot in the shots lane) */
+  staleIds: ReadonlySet<string>;
   transport: Transport;
 }
 
 const indexAt = <T extends { start: number; end: number }>(items: T[], t: number) =>
   items.findIndex((x) => t >= x.start && t < x.end);
 
-export function Timeline({ duration, peaks, analysis, shots, selected, primary, onPick, thumbs, locationNames, transport }: TimelineProps) {
+export function Timeline({ duration, peaks, analysis, shots, selected, primary, onPick, thumbs, staleIds, locationNames, follow, onFollow, transport }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const t = useT();
   const inner = useRef<HTMLDivElement>(null);
@@ -42,7 +47,6 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
   const clock = useRef<HTMLSpanElement>(null);
   const [viewport, setViewport] = useState(0);
   const [zoom, setZoom] = useState(2.5);
-  const [follow, setFollow] = useState(true);
   const [curShot, setCurShot] = useState(-1);
   const [curLine, setCurLine] = useState(-1);
   const anchor = useRef<{ t: number; x: number } | null>(null);
@@ -194,7 +198,7 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
             <Trans k="tl.shortcuts" values={{ space: <Kbd>{t("tl.space")}</Kbd>, arrows: <><Kbd>←</Kbd><Kbd>→</Kbd></>, cmd: <Kbd>⌘</Kbd> }} />
           </span>
           <label className="mr-2 flex items-center gap-1.5">
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-[#ff5a3c]" />
+            <input type="checkbox" checked={follow} onChange={(e) => onFollow(e.target.checked)} className="accent-[#ff5a3c]" />
             {t("tl.follow")}
           </label>
           <button type="button" onClick={() => zoomTo(zoom / 1.6)} disabled={zoom <= 1} aria-label={t("tl.zoomOut")} className="h-7 w-7 rounded border border-ink-600 hover:border-ink-400 disabled:opacity-40">−</button>
@@ -231,7 +235,7 @@ export function Timeline({ duration, peaks, analysis, shots, selected, primary, 
               <SectionsLane sections={analysis?.sections ?? []} pps={pps} />
             </div>
             <div className="border-t border-ink-800" onClick={(e) => transport.seek(timeAt(e.clientX))}>
-              <ShotsLane shots={shots} pps={pps} selected={selected} primary={primary} current={curShot} thumbs={thumbs} locationNames={locationNames} onPick={onPick} />
+              <ShotsLane shots={shots} pps={pps} selected={selected} primary={primary} current={curShot} thumbs={thumbs} staleIds={staleIds} locationNames={locationNames} onPick={onPick} />
             </div>
             <div className="border-t border-ink-800" onClick={(e) => transport.seek(timeAt(e.clientX))}>
               <LyricsLane lines={lines ?? []} pps={pps} current={curLine} onSeek={transport.seek} />

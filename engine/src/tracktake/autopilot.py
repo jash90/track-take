@@ -8,14 +8,15 @@ State lives in project.json (`autopilot`), so the UI can show it after a restart
 
 from __future__ import annotations
 
+import math
 import subprocess
 from datetime import UTC, datetime
 
-from tracktake import cli, config, presets, steps
+from tracktake import cli, nethistory, presets, steps
 from tracktake.jobs import Context
 from tracktake.project import Project
 
-STAGES = ("analyze", "plan", "write", "review", "character", "keys", "render")
+STAGES = ("analyze", "plan", "write", "review", "character", "keys", "check", "render")
 
 
 def clip_count(p: Project) -> int:
@@ -34,10 +35,25 @@ def clip_count(p: Project) -> int:
         return 0
 
 
+def clip_frames(p: Project) -> int:
+    """Frames the clips of this video will have in total (each shot: 16 fps, 33..81 frames, as scripts/full_clips.py);
+    the clip time follows it. Before the storyboard exists: ~72 frames per guessed shot."""
+    sb = p.storyboard()
+    if not sb:
+        return clip_count(p) * 72
+    return sum(max(33, min(81, 4 * math.ceil((s["end"] - s["start"]) * 16 / 4) + 1)) for s in sb["shots"])
+
+
 def render_presets(p: Project) -> list[dict]:
-    s = config.load().vast
+    import argparse
+
+    region = p.meta().settings.region
+    s = cli._vast_settings(argparse.Namespace(region=region))
     s.models = ["wan22_i2v"]
-    return presets.presets(cli.gpu_catalog(s), clip_count(p), cli.CLIP_S, cli.SETUP_H, cli.RENDER_H)
+    s.download_gb = sum(cli.MODEL_GB[m] for m in s.models) + 3.0
+    setup_h = nethistory.history().typical_setup_minutes(s.regions, s.download_gb) / 60
+    out = presets.presets(cli.gpu_catalog(s), clip_frames(p), cli.FRAME_S, setup_h, cli.RENDER_H + cli.FIXED_H)
+    return [o | {"minutes_max": o["minutes"] + cli.FAILED_HOST_MIN} for o in out]
 
 
 def custom_choice(p: Project) -> dict | None:
@@ -47,14 +63,16 @@ def custom_choice(p: Project) -> dict | None:
     from tracktake import vast
 
     m = p.meta().settings
-    s = cli._remote_settings(argparse.Namespace(gpu=m.gpu, max_dph=m.max_dph, gpus=m.gpus), ["wan22_i2v"])
+    s = cli._remote_settings(argparse.Namespace(gpu=m.gpu, max_dph=m.max_dph, gpus=m.gpus, region=m.region),
+                             ["wan22_i2v"])
     available = len(vast.search_offers(s, limit=100))
     if not available:
         return None
     workers = min(max(1, m.workers), available)
-    hours, usd = cli._estimate(s, workers, clip_count(p), formats=1)
+    hours, usd = cli._estimate(s, workers, clip_count(p), formats=1, frames=clip_frames(p))
     return {"id": "custom", "gpu": m.gpu, "label": m.gpu.replace("_", " "), "gpus": m.gpus, "workers": workers,
-            "max_dph": m.max_dph, "minutes": round(hours * 60), "usd": round(usd, 2)}
+            "max_dph": m.max_dph, "minutes": round(hours * 60), "minutes_max": round(hours * 60) + cli.FAILED_HOST_MIN,
+            "usd": round(usd, 2)}
 
 
 def _state(p: Project, **changes) -> None:
@@ -90,6 +108,11 @@ def run(ctx: Context, p: Project, budget_usd: float, preset: str, review: bool) 
         if steps.missing_keys(p):
             stage("keys")
             steps.run_codex_keys(ctx, p)
+        if steps.keys_need_check(p):
+            stage("check")
+            steps.run_keys_check(ctx, p)
+            if steps.key_counts(p)["missing"]:  # a redraw failed and lost its keyframe: the render needs one
+                steps.run_codex_keys(ctx, p)
         stage("render")
         if preset == "custom":
             choice = custom_choice(p)
@@ -99,7 +122,8 @@ def run(ctx: Context, p: Project, budget_usd: float, preset: str, review: bool) 
             raise RuntimeError("no GPU offers match the chosen card right now - pick another or try again later")
         if choice["usd"] > budget_usd:
             _state(p, state="awaiting_budget", stage="render", job=ctx.job.id, budget_usd=budget_usd, preset=preset,
-                   review=review, estimate_usd=choice["usd"], estimate_minutes=choice["minutes"])
+                   review=review, estimate_usd=choice["usd"], estimate_minutes=choice["minutes"],
+                   estimate_minutes_max=choice.get("minutes_max"))
             ctx.log(f"render would cost ~${choice['usd']:.2f}, over the ${budget_usd:.2f} budget - waiting")
             return
         if preset != "custom":

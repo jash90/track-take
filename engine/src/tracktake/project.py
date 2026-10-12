@@ -35,6 +35,7 @@ class Settings:
     gpu: str = "RTX_4090"
     gpus: int = 1  # GPUs per host (one ComfyUI each, one model download)
     max_dph: float = 0.5  # USD per hour per GPU
+    region: str = "US"  # rent here first (faster model downloads); "any" = anywhere, or e.g. "US,CA"
     captions: bool = True  # karaoke lyrics in the video
     beat_motion: bool = True  # camera pump on downbeats and shake on snares
 

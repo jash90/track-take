@@ -33,7 +33,7 @@ export const STEPS: Step[] = [
     n: "02",
     label: "step.storyboard",
     kinds: ["storyboard"],
-    stages: ["plan", "write"],
+    stages: ["plan", "write", "review"],
     status: (p, t) =>
       p.stage.storyboard
         ? { text: t("step.storyboard.written", { written: p.stage.storyboard_written, shots: p.stage.shots }), done: p.stage.shots > 0 && p.stage.storyboard_written >= p.stage.shots }
@@ -43,8 +43,8 @@ export const STEPS: Step[] = [
     to: "klatki",
     n: "03",
     label: "step.keys",
-    kinds: ["character", "keys_codex"],
-    stages: ["character", "keys"],
+    kinds: ["character", "keys_codex", "keys_check"],
+    stages: ["character", "keys", "check"],
     status: (p) => {
       const total = p.stage.shots;
       const c = p.stage.keys.codex ?? 0;

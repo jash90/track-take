@@ -46,11 +46,12 @@ interface ShotsLaneProps {
   primary: string | null;
   current: number;
   thumbs: Record<string, string | null>;
+  staleIds: ReadonlySet<string>;
   onPick: (id: string, additive: boolean) => void;
   locationNames?: Record<string, string>;
 }
 
-export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary, current, thumbs, onPick, locationNames }: ShotsLaneProps) {
+export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary, current, thumbs, staleIds, onPick, locationNames }: ShotsLaneProps) {
   const t = useT();
   return (
     <div className="relative" style={{ height: SHOTS_H }} role="listbox" aria-label={t("tl.shotsAria")} aria-multiselectable>
@@ -60,6 +61,7 @@ export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary
         const isSel = selected.has(s.id);
         const thumb = thumbs[s.id];
         const showThumb = thumb && w >= 70;
+        const stale = staleIds.has(s.id);
         const cut = isCut(s, i);
         const next = shots[i + 1];
         const joinsNext = !!next && !isCut(next, i + 1);
@@ -73,7 +75,7 @@ export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary
             aria-selected={isSel}
             tabIndex={s.id === primary ? 0 : -1}
             data-shot={s.id}
-            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? t("tl.cut") : t("tl.continuous")}${written ? "" : ` · ${t("tl.unwritten")}`}${s.location ? ` · ${t("tl.location", { name: locationNames?.[s.location] ?? s.location })}` : ""}`}
+            title={`${s.id} · ${formatTime(s.start, true)}–${formatTime(s.end, true)} · ${cut ? t("tl.cut") : t("tl.continuous")}${written ? "" : ` · ${t("tl.unwritten")}`}${s.location ? ` · ${t("tl.location", { name: locationNames?.[s.location] ?? s.location })}` : ""}${stale ? ` · ${t("tl.staleKey")}` : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               onPick(s.id, e.metaKey || e.ctrlKey || e.shiftKey);
@@ -109,6 +111,7 @@ export const ShotsLane = memo(function ShotsLane({ shots, pps, selected, primary
               <span className="relative flex items-center gap-1 px-1.5 pt-1 font-mono text-[0.66rem] text-ink-100 [text-shadow:0_1px_2px_#000]">
                 <span className={cx("h-1.5 w-1.5 shrink-0 rounded-full", written ? "bg-ok" : "border border-ink-400")} />
                 {s.id}
+                {stale && <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn shadow-[0_0_4px_rgb(227_172_76/0.8)]" />}
               </span>
             )}
           </div>

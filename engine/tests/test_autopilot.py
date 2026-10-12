@@ -26,3 +26,16 @@ def test_three_presets_are_sane():
 
 def test_no_offers_no_presets():
     assert presets.presets([], 45, 55.0, 0.17, 0.05) == []
+
+
+def test_presets_prefer_one_machine_with_several_gpus():
+    cat = [{"gpu": "RTX_4090", "label": "RTX 4090", "suitable": True, "matching": 30, "speed": 1.0,
+            "speed_measured": True, "hosts": [{"gpus": 1, "offers": 10, "min_dph": 0.40},
+                                              {"gpus": 2, "offers": 3, "min_dph": 0.82},
+                                              {"gpus": 4, "offers": 2, "min_dph": 1.66}]}]
+    opts = presets.options(cat, 63, 55.0, 0.15, 0.08)
+    combos = {(o["gpus"], o["workers"]) for o in opts}
+    assert (2, 1) in combos and (4, 1) in combos  # one machine with 2 / 4 GPUs
+    assert (1, 2) not in combos and (1, 4) not in combos  # never two machines when one machine has two GPUs
+    only_single = [dict(cat[0], hosts=[{"gpus": 1, "offers": 10, "min_dph": 0.40}])]
+    assert {(o["gpus"], o["workers"]) for o in presets.options(only_single, 63, 55.0, 0.15, 0.08)} == {(1, 1), (1, 2), (1, 4)}

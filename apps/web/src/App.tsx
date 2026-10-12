@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError } from "./api/client";
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider, useParams } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/Toaster";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
@@ -11,6 +11,7 @@ import { KeysStep } from "./features/keys/KeysStep";
 import { RenderStep } from "./features/render/RenderStep";
 import { ResultStep } from "./features/result/ResultStep";
 import { NotFound } from "./components/NotFound";
+import { RouteError } from "./components/ErrorBoundary";
 import { I18nProvider } from "./i18n";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ const queryClient = new QueryClient({
 const router = createBrowserRouter([
   {
     element: <AppShell />,
+    errorElement: <RouteError />,
     children: [
       { path: "/", element: <ProjectsPage /> },
       {
@@ -39,7 +41,7 @@ const router = createBrowserRouter([
           { path: "klatki", element: <KeysStep /> },
           { path: "wideo", element: <RenderStep /> },
           { path: "wynik", element: <ResultStep /> },
-          { path: "*", element: <Navigate to="wejscie" replace /> },
+          { path: "*", element: <ToInputs /> },
         ],
       },
       { path: "*", element: <NotFound /> },
@@ -57,4 +59,10 @@ export function App() {
       </QueryClientProvider>
     </I18nProvider>
   );
+}
+
+// an unknown step: back to the first one; absolute, because a relative target would nest under the bad path forever
+function ToInputs() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/p/${encodeURIComponent(id)}/wejscie`} replace />;
 }

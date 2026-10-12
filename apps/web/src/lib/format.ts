@@ -1,4 +1,5 @@
 import { getLocale } from "../i18n/core";
+import type { TFn } from "../i18n";
 
 /** 83.4 -> "1:23.4" (tenths optional). */
 export function formatTime(seconds: number, tenths = false): string {
@@ -58,4 +59,33 @@ export function elapsed(from: string | null, to: string | null): string {
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+/** Compact time range for cards and chips: "32–42 min" (or a single value when there is no upper bound). */
+export function timeRange(min: number, max?: number): string {
+  if (!Number.isFinite(min)) return "—";
+  if (max === undefined || !Number.isFinite(max) || Math.round(max) <= Math.round(min)) return formatMinutes(min);
+  // plain minutes read best up to ~1.5 h ("54–64 min"); longer renders switch to hours
+  if (max < 100) return `${Math.round(min)}–${Math.round(max)} min`;
+  return `${formatMinutes(min)}–${formatMinutes(max)}`;
+}
+
+/** Parts for the roomy form "~32 min (up to ~42 …)": max without the unit when both are under an hour. */
+export function timeRangeParts(min: number, max?: number): { min: string; max: string | null } {
+  const hasMax = max !== undefined && Number.isFinite(max) && Math.round(max) > Math.round(min);
+  return {
+    min: (max ?? min) < 100 ? `${Math.round(min)} min` : formatMinutes(min),
+    max: hasMax ? ((max as number) < 100 ? String(Math.round(max as number)) : formatMinutes(max as number)) : null,
+  };
+}
+
+/** Roomy form: "~32 min (do ~42, jeśli host nie wystartuje)". */
+export function timeRoomy(t: TFn, min: number, max?: number): string {
+  const p = timeRangeParts(min, max);
+  return p.max ? t("time.roomy", { min: p.min, max: p.max }) : t("time.single", { min: p.min });
+}
+
+/** "1 maszyna · 2× RTX PRO 6000 S" — machines and GPUs per machine, always explicit. */
+export function machineSummary(t: TFn, workers: number, gpus: number, gpu: string): string {
+  return t("summary.machines", { machines: t("est.cards", { count: workers }), gpus, gpu: gpu.replace(/_/g, " ") });
 }

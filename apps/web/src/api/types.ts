@@ -11,6 +11,7 @@ export interface ProjectSettings {
   gpus: number; // GPUs per machine (host); >1 = one machine with N GPUs, one model download
   max_dph: number; // USD per hour cap per GPU (a host with N GPUs may cost up to N × max_dph)
   captions: boolean; // karaoke lyrics burned into the video (default true)
+  region?: string; // "US" (default) | "US,CA" | "any" | comma list of country codes; falls back to anywhere when no offer
   beat_motion: boolean; // camera pump on downbeats + shake on snares (default true)
 }
 
@@ -40,7 +41,8 @@ export interface Project {
 export type RenderPresetId = "cheapest" | "recommended" | "fastest";
 /** what the user picked: one of the presets, or "custom" = the project's saved gpu/gpus/max_dph/workers */
 export type PresetChoice = RenderPresetId | "custom";
-export type AutopilotStage = "analyze" | "plan" | "write" | "character" | "keys" | "render";
+// "review" = waiting for the storyboard approval; "check" = visual keyframe continuity check (keys_check)
+export type AutopilotStage = "analyze" | "plan" | "write" | "review" | "character" | "keys" | "check" | "render";
 export type AutopilotState = "running" | "awaiting_storyboard" | "awaiting_budget" | "done" | "failed" | "cancelled";
 export interface Autopilot {
   state: AutopilotState;
@@ -69,6 +71,7 @@ export interface RenderPreset {
   gpus: number;
   workers: number;
   minutes: number;
+  minutes_max?: number; // upper bound if a host fails to start
   usd: number;
   speed: number;
   speed_measured: boolean;
@@ -164,14 +167,40 @@ export interface ShotKeys {
   portrait: string | null;
   landscape_thumb: string | null; // small JPEG for grids
   portrait_thumb: string | null;
+  // set=codex only: drawn before its scene / the world bible / the keyframe it is drawn after changed → no longer matches
+  landscape_stale?: boolean;
+  portrait_stale?: boolean;
+  // set=codex only: correction note left by the keyframe check, still pending — the keyframe is stale and will be redrawn
+  landscape_issue?: string | null;
+  portrait_issue?: string | null;
+  // set=codex only: mirrored automatically by the keyframe check (the original is kept as *.orig.png)
+  landscape_flipped?: boolean;
+  portrait_flipped?: boolean;
+}
+export type KeyCheckKind = "mirrored" | "object" | "count" | "character" | "place" | "other";
+export interface KeyCheckIssue {
+  shot: string;
+  kind: KeyCheckKind;
+  problem: string;
+  fix: string; // correction for the image model that redraws it
+}
+/** Last visual keyframe continuity check (a vision model compares the pictures of each location / continuous take). */
+export interface KeyCheck {
+  checked: string; // ISO date
+  orientation: Orientation;
+  issues: KeyCheckIssue[];
 }
 export interface Keys {
   character_sheet: string | null;
   sets: Record<KeySet, Record<string, ShotKeys>>; // shot id -> keys
+  check?: KeyCheck | null; // null until the first check
 }
 // GET /api/projects/{id}/keys -> Keys
+// POST /api/projects/{id}/keys/check {redraw?: boolean = true} -> Job (kind "keys_check", params {redraw}); 409 while running.
+//   Mirrored frames are flipped; others get a correction note (stale) and, with redraw, are redrawn and re-checked (≤3 rounds).
 // POST /api/projects/{id}/character {force?: boolean} -> Job  (Codex character sheet from cover + heroine text)
-// POST /api/projects/{id}/keys/codex {shots?: string[], force?: boolean, workers?: number} -> Job  (project orientation only)
+// POST /api/projects/{id}/keys/codex {shots?: string[], force?: boolean, workers?: number} -> Job  (project orientation only;
+//   without shots: draws the missing AND redraws the stale ones — job params {missing, stale})
 
 export interface VideoFiles {
   preview: string | null; // small HEVC (<50 MB) URL
@@ -198,7 +227,9 @@ export interface Estimate {
   models_gb: number;
   offers: Offer[]; // cheapest matching offers right now
   missing_keys: number; // keyframes still missing for set=codex (render refuses while > 0)
-  alternatives: { workers: number; minutes: number; usd: number }[]; // same job with 1/2/4 cards: fewer = cheaper, slower
+  stale_keys: number; // set=codex keyframes drawn before their scene/world changed (render still runs, with the old images)
+  alternatives: { workers: number; minutes: number; minutes_max?: number; usd: number }[]; // same job with 1/2/4 cards: fewer = cheaper, slower
+  minutes_max?: number; // upper bound if a host fails to start and a spare takes over
   gpu: string;
   gpus: number;
   speed: number; // clip speed vs an RTX 4090
@@ -226,9 +257,11 @@ export interface VastGpu {
   speed: number; // vs RTX 4090
   speed_measured: boolean;
   usd_per_4090_hour: number | null; // lower = cheaper video
+  in_region?: boolean; // false = no matching offer in the region; numbers come from the "anywhere" fallback
 }
 export interface VastGpus {
   min_vram_gb: number;
+  regions?: string[];
   filters: { min_reliability: number; max_download_usd_per_gb: number; min_inet_down_mbps: number };
   gpus: VastGpu[];
 }
@@ -250,6 +283,8 @@ export interface VastInstance {
   gpu: string;
   status: string;
   dph: number;
+  gpus?: number; // GPUs in this machine
+  location?: string; // e.g. "New York, US"
   known?: boolean; // started by this app; false = rented elsewhere or orphaned
   in_use?: boolean; // used by a running render
   job?: string | null; // id of the running render job using it
@@ -259,7 +294,7 @@ export interface VastInstance {
 // POST /api/vast/key {key: string} -> VastStatus   (stores it like `vastai set api-key`, never echoed back)
 // POST /api/vast/down -> {freed: number, usd: number}
 
-export type JobKind = "analyze" | "storyboard" | "character" | "keys_codex" | "render" | "autopilot" | "continuity";
+export type JobKind = "analyze" | "storyboard" | "character" | "keys_codex" | "keys_check" | "render" | "autopilot" | "continuity";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export interface Job {
   id: string;

@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -258,15 +259,30 @@ def make_character(pid: str, body: CharacterBody) -> dict:
 class CodexKeysBody(BaseModel):
     shots: list[str] | None = None
     force: bool = False
-    workers: int = 4
+    workers: int = 8
+
+
+class KeysCheckBody(BaseModel):
+    redraw: bool = True
+
+
+@app.post("/api/projects/{pid}/keys/check")
+def check_keys(pid: str, body: KeysCheckBody) -> dict:
+    p = project.get(pid)
+    if not any(p.key_path("codex", s["id"], p.meta().orientation).exists() for s in (p.storyboard() or {"shots": []})["shots"]):
+        raise ValueError("no Codex keyframes to check yet")
+    return jobs.view(jobs.submit("keys_check", pid, "Keyframe check", "tracktake.steps:run_keys_check",
+                                 {"redraw": body.redraw}, {"redraw": body.redraw}))
 
 
 @app.post("/api/projects/{pid}/keys/codex")
 def make_codex_keys(pid: str, body: CodexKeysBody) -> dict:
     p = project.get(pid)
     planned = keyframes.codex_jobs(p, body.shots, [p.meta().orientation], force=False)  # validates the storyboard early
-    params = {"shots": len(body.shots)} if body.shots else {"missing": len(planned)}
-    label = f"{len(body.shots)} shots" if body.shots else f"{len(planned)} missing"
+    stale = sum(1 for j in planned if j.replace)
+    params = {"shots": len(body.shots)} if body.shots else {"missing": len(planned) - stale, "stale": stale}
+    label = f"{len(body.shots)} shots" if body.shots else (f"{len(planned) - stale} missing"
+                                                         + (f", {stale} stale" if stale else ""))
     return jobs.view(jobs.submit("keys_codex", pid, f"Codex keyframes ({label})", "tracktake.steps:run_codex_keys",
                                  {"shots": body.shots, "force": body.force, "workers": body.workers}, params))
 
@@ -289,8 +305,9 @@ def get_videos(pid: str) -> dict:
     return out
 
 
-def _settings_ns(gpu: str | None, max_dph: float | None, gpus: int | None = None) -> argparse.Namespace:
-    return argparse.Namespace(gpu=gpu, max_dph=max_dph, gpus=gpus)
+def _settings_ns(gpu: str | None, max_dph: float | None, gpus: int | None = None,
+                 region: str | None = None) -> argparse.Namespace:
+    return argparse.Namespace(gpu=gpu, max_dph=max_dph, gpus=gpus, region=region)
 
 
 @app.get("/api/projects/{pid}/estimate")
@@ -303,22 +320,24 @@ def estimate(pid: str, set: str = "codex", workers: int = 4, gpu: str | None = N
     sb = p.storyboard()
     if not sb:
         raise ValueError("no storyboard")
-    orientation = p.meta().orientation
     clips = len(sb["shots"])
     models = ["wan22_i2v", "zimage"] if set == "comfy" else ["wan22_i2v"]
-    s = cli._remote_settings(_settings_ns(gpu or m.gpu, max_dph or m.max_dph, gpus or m.gpus), models)
+    s = cli._remote_settings(_settings_ns(gpu or m.gpu, max_dph or m.max_dph, gpus or m.gpus, m.region), models)
     available = len(vast.search_offers(s, limit=100))  # cached a minute; a render can't get more machines than this
     workers = min(workers, available) if available else workers
-    hours, usd = cli._estimate(s, workers, clips, formats=1)
+    frames = autopilot.clip_frames(p)
+    hours, usd = cli._estimate(s, workers, clips, formats=1, frames=frames)
     alternatives = []
     for n in sorted(n for n in {1, 2, 4, workers} if not available or n <= available):
-        h, u = (hours, usd) if n == workers else cli._estimate(s, n, clips, formats=1)
-        alternatives.append({"workers": n, "minutes": round(h * 60), "usd": round(u, 2)})
+        h, u = (hours, usd) if n == workers else cli._estimate(s, n, clips, formats=1, frames=frames)
+        alternatives.append({"workers": n, "minutes": round(h * 60), "minutes_max": round(h * 60) + cli.FAILED_HOST_MIN,
+                             "usd": round(u, 2)})
     offers = vast.search_offers(s, limit=5)
-    missing = 0 if set == "comfy" else sum(1 for sh in sb["shots"]
-                                           if not p.key_path("codex", sh["id"], orientation).exists())
+    keys = {"missing": 0, "stale": 0} if set == "comfy" else steps.key_counts(p)
+    missing = keys["missing"]
     return {"set": set, "workers": workers, "clips": clips, "minutes": round(hours * 60), "usd": round(usd, 2),
-            "models_gb": round(s.download_gb), "missing_keys": missing, "alternatives": alternatives,
+            "minutes_max": round(hours * 60) + cli.FAILED_HOST_MIN if hours else 0,
+            "models_gb": round(s.download_gb), "missing_keys": missing, "stale_keys": keys["stale"], "alternatives": alternatives,
             "gpu": s.gpu, "gpus": s.gpus, "speed": cli.gpu_speed(s.gpu), "speed_measured": s.gpu in cli.GPU_SPEED,
             "no_offers": not offers, "max_dph": s.max_dph, "available_machines": available,
             "offers": [{"id": o.id, "gpu": o.gpu, "dph": round(o.dph, 3), "download_usd": round(o.setup_cost(s.download_gb), 2),
@@ -383,6 +402,17 @@ def render_presets(pid: str) -> dict:
             "presets": autopilot.render_presets(p)}
 
 
+@app.post("/api/client-error")
+async def client_error(request: Request) -> dict:
+    """A crash in the browser (error boundary / window.onerror), appended to data/client_errors.log."""
+    raw = (await request.body())[:20_000].decode(errors="replace")
+    line = json.dumps({"at": datetime.now(UTC).isoformat(timespec="seconds"), "report": raw}, ensure_ascii=False)
+    with (project.PROJECTS.parent / "client_errors.log").open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    log.warning("browser error: %s", raw[:300])
+    return {"ok": True}
+
+
 @app.get("/api/setup")
 def setup_status() -> dict:
     return setup_check.status()
@@ -395,13 +425,15 @@ def setup_ssh_key() -> dict:
 
 
 @app.get("/api/vast/gpus")
-def vast_gpus() -> dict:
-    """GPU models on offer now (cached ~5 min): for the card picker's autocomplete and its price/speed hints."""
-    from tracktake import cli, config
+def vast_gpus(region: str | None = None) -> dict:
+    """GPU models on offer now (cached ~5 min): for the card picker's autocomplete and its price/speed hints.
+    `region`: country codes to prefer ("US", "US,CA", "any"); default from config."""
+    from tracktake import cli
 
-    s = config.load().vast
-    return {"min_vram_gb": 24, "filters": {"min_reliability": s.min_reliability, "max_download_usd_per_gb":
-            s.max_download_cost, "min_inet_down_mbps": s.min_inet_down}, "gpus": cli.gpu_catalog(s)}
+    s = cli._vast_settings(argparse.Namespace(region=region))
+    return {"min_vram_gb": 24, "regions": s.regions,
+            "filters": {"min_reliability": s.min_reliability, "max_download_usd_per_gb": s.max_download_cost,
+                        "min_inet_down_mbps": s.min_inet_down}, "gpus": cli.gpu_catalog(s)}
 
 
 @app.get("/api/vast")
@@ -421,7 +453,9 @@ def vast_status() -> dict:
             name = names.get(i["id"], "")
             job = _job_using(name)
             out["instances"].append({"id": i["id"], "name": name or i.get("label") or "", "known": bool(name),
-                                     "gpu": i.get("gpu_name", ""), "status": i.get("actual_status") or "",
+                                     "gpu": i.get("gpu_name", ""), "gpus": int(i.get("num_gpus") or 1),
+                                     "location": i.get("geolocation") or "",
+                                     "status": i.get("actual_status") or "",
                                      "dph": round(float(i.get("dph_total") or 0), 3),
                                      "in_use": job is not None, "job": job.id if job else None,
                                      "project": job.project if job else None})

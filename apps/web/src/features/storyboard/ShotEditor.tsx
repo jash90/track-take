@@ -1,4 +1,5 @@
-import type { KeySet, Orientation, Shot, ShotKeys, WorldItem } from "../../api/types";
+import type { ReactNode } from "react";
+import type { KeyCheckKind, KeySet, Orientation, Shot, ShotKeys, WorldItem } from "../../api/types";
 import { ShotWorldFields } from "./ShotWorldFields";
 import { Chip } from "../../components/ui";
 import { cx } from "../../lib/cx";
@@ -6,12 +7,15 @@ import { formatTime } from "../../lib/format";
 import { kindColor, kindLabel } from "../../lib/kinds";
 import { isCut } from "../../lib/continuity";
 import { useT } from "../../i18n";
+import { KeyBadges, keyBorder } from "../keys/stale";
 
 interface Props {
   shot: Shot;
   index: number;
   total: number;
   keys: Partial<Record<KeySet, ShotKeys | undefined>>;
+  /** error kind of this shot in the last keyframe check */
+  issueKind?: KeyCheckKind;
   orientation: Orientation;
   world: { locations: WorldItem[]; props: WorldItem[] };
   disabled: boolean;
@@ -26,7 +30,7 @@ const SETS: { set: KeySet; label: string }[] = [
   { set: "comfy", label: "ComfyUI" },
 ];
 
-export function ShotEditor({ shot, index, total, keys, orientation, world, disabled, onChange, onStep, onOpenImage, onPlay }: Props) {
+export function ShotEditor({ shot, index, total, keys, issueKind, orientation, world, disabled, onChange, onStep, onOpenImage, onPlay }: Props) {
   const written = shot.scene.trim().length > 0;
   const t = useT();
   return (
@@ -110,6 +114,8 @@ export function ShotEditor({ shot, index, total, keys, orientation, world, disab
                     src={thumb ?? null}
                     ratio={orientation === "landscape" ? "aspect-video w-full max-w-[300px]" : "aspect-[9/16] w-[118px]"}
                     label={`${shot.id} ${label} ${orientation === "landscape" ? "16:9" : "9:16"}`}
+                    badges={set === "codex" ? <KeyBadges k={k} orientation={orientation} kind={issueKind} /> : null}
+                    border={set === "codex" ? keyBorder(k, orientation) : null}
                     onOpen={() => onOpenImage(set)}
                   />
                 </div>
@@ -122,7 +128,14 @@ export function ShotEditor({ shot, index, total, keys, orientation, world, disab
   );
 }
 
-function Thumb({ src, ratio, label, onOpen }: { src: string | null; ratio: string; label: string; onOpen: () => void }) {
+function Thumb({ src, ratio, label, badges, border, onOpen }: {
+  src: string | null;
+  ratio: string;
+  label: string;
+  badges: ReactNode;
+  border: string | null;
+  onOpen: () => void;
+}) {
   const t = useT();
   if (!src) {
     return (
@@ -130,7 +143,8 @@ function Thumb({ src, ratio, label, onOpen }: { src: string | null; ratio: strin
     );
   }
   return (
-    <button type="button" onClick={onOpen} aria-label={t("common.enlarge", { label })} className={cx(ratio, "overflow-hidden rounded border border-ink-600 hover:border-safe")}>
+    <button type="button" onClick={onOpen} aria-label={t("common.enlarge", { label })} className={cx(ratio, "relative overflow-hidden rounded border hover:border-safe", border ?? "border-ink-600")}>
+      {badges}
       <img src={src} alt={label} loading="lazy" className="h-full w-full object-cover" />
     </button>
   );

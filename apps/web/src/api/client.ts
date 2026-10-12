@@ -133,6 +133,7 @@ export const api = {
     request<Job>(`${p(id)}/character`, json("POST", { force })),
   codexKeys: (id: string, payload: CodexKeysPayload) =>
     request<Job>(`${p(id)}/keys/codex`, json("POST", payload)),
+  checkKeys: (id: string, redraw = true) => request<Job>(`${p(id)}/keys/check`, json("POST", { redraw })),
 
   videos: (id: string) => request<Videos>(`${p(id)}/videos`),
   estimate: (id: string, set: KeySet, workers: number, choice: EstimateChoice = {}) => {
@@ -150,7 +151,7 @@ export const api = {
   renderPresets: (id: string) => request<RenderPresets>(`${p(id)}/render-presets`),
   setup: () => request<Setup>("/api/setup"),
   setupSshKey: () => request<Setup>("/api/setup/ssh-key", { method: "POST" }),
-  vastGpus: () => request<VastGpus>("/api/vast/gpus"),
+  vastGpus: (region?: string) => request<VastGpus>(`/api/vast/gpus${region ? `?region=${encodeURIComponent(region)}` : ""}`),
   vastKey: (key: string) => request<VastStatus>("/api/vast/key", json("POST", { key })),
   vastRelease: (id: number, force = false) =>
     request<{ freed: number; usd: number }>(`/api/vast/instances/${id}/down?force=${force}`, { method: "POST" }),
@@ -175,7 +176,7 @@ export const qk = {
   videos: (id: string) => ["project", id, "videos"] as const,
   estimate: (id: string, set: KeySet, workers: number, choice: EstimateChoice = {}) =>
     ["project", id, "estimate", set, workers, choice.gpu ?? null, choice.gpus ?? null, choice.max_dph ?? null] as const,
-  vastGpus: ["vast", "gpus"] as const,
+  vastGpus: (region?: string) => ["vast", "gpus", region ?? null] as const,
   renderPresets: (id: string) => ["project", id, "render-presets"] as const,
   setup: ["setup"] as const,
   jobs: (id: string) => ["jobs", id] as const,

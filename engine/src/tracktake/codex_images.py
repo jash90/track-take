@@ -8,6 +8,7 @@ keyframe attached, so it is drawn as the next moment of the same take; such jobs
 
 from __future__ import annotations
 
+import dataclasses
 import subprocess
 import threading
 import time
@@ -27,6 +28,9 @@ class ImageJob:
     refs: list[Path] = field(default_factory=list)
     previous: Path | None = None  # keyframe of the shot this one continues (attached once it exists)
     anchor: Path | None = None  # first keyframe of the same location earlier in the video (after a cut)
+    fingerprint: str = ""  # what the image is drawn from; saved next to it so later edits can mark it stale
+    fix_note: Path | None = None  # correction from the keyframe check, removed once the image is redrawn
+    replace: bool = False  # an existing (stale) image is redrawn; it is kept until the new one succeeds
 
     def attachments(self) -> list[Path]:
         extra = [x for x in (self.previous, self.anchor) if x and x.exists()]
@@ -34,6 +38,11 @@ class ImageJob:
 
     def depends_on(self) -> list[Path]:
         return [x for x in (self.previous, self.anchor) if x]
+
+
+SIDES = ("Left and right: 'on the left/right of the frame' means the picture; a person's or vehicle's own left/right "
+         "turns with the camera - seen from the front their own left is on the RIGHT of the picture, seen from behind "
+         "on the left. Do not mirror the scene.")
 
 
 def _instruction(job: ImageJob) -> str:
@@ -52,15 +61,36 @@ def _instruction(job: ImageJob) -> str:
                  "layout, furniture, objects and colours exactly (the same bed, table, window, door, the same number "
                  "and size of everything); the camera angle and what happens may differ. ")
     return (f"Use your image generation tool to create ONE {job.orientation} image ({SIZES[job.orientation]}) and save "
-            f"it to ./{job.out.name}. {refs}{job.prompt} No text, no letters, no labels, no watermark, no border. "
+            f"it to ./{job.out.name}. {refs}{job.prompt} {SIDES} No text, no letters, no labels, no watermark, no border. "
             "Do not do anything else and do not modify any other file.")
 
 
 def generate(job: ImageJob, timeout: float = 900, retries: int = 1) -> float:
-    """Run Codex until `job.out` exists as a valid image. Returns seconds spent; skips if the file already exists."""
-    if job.out.exists():
+    """Run Codex until `job.out` exists as a valid image. Returns seconds spent; skips if the file already exists
+    (unless `replace`: then the new image is drawn under a temporary name and swapped in when it is valid, so the
+    old one stays visible meanwhile and stays put if Codex fails)."""
+    if job.out.exists() and not job.replace:
         return 0.0
     job.out.parent.mkdir(parents=True, exist_ok=True)
+    if job.replace and job.out.exists():
+        draft = dataclasses.replace(job, out=job.out.with_name(f"{job.out.stem}.new.png"), replace=False)
+        draft.out.unlink(missing_ok=True)
+        seconds = _generate(draft, timeout, retries)
+        draft.out.replace(job.out)
+    else:
+        seconds = _generate(job, timeout, retries)
+    if job.fingerprint:
+        fingerprint_path(job.out).write_text(job.fingerprint)
+    if job.fix_note:
+        job.fix_note.unlink(missing_ok=True)
+    return seconds
+
+
+def fingerprint_path(image: Path) -> Path:
+    return image.with_suffix(".fp")
+
+
+def _generate(job: ImageJob, timeout: float, retries: int) -> float:
     cmd = ["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", str(job.out.parent), "--json"]
     for ref in job.attachments():
         cmd += ["-i", str(ref.resolve())]

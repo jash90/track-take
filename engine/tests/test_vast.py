@@ -109,3 +109,65 @@ def test_gpu_catalog_groups_offers_and_applies_filters():
     assert [h["gpus"] for h in by["RTX_4090"]["hosts"]] == [1, 8] and by["RTX_4090"]["speed_measured"]
     assert 1.4 < by["RTX_5090"]["speed"] < 1.6 and not by["RTX_5090"]["speed_measured"]
     assert by["Tesla_V100"]["suitable"] is False and cat[-1]["gpu"] == "Tesla_V100"
+
+
+def test_region_preference_with_fallback():
+    import json as _json
+
+    from tracktake import vast
+    from tracktake.config import VastSettings
+
+    def raw(i, loc, dph):
+        return {"id": i, "gpu_name": "RTX 4090", "dph_total": dph, "reliability2": 0.99, "inet_down": 900,
+                "disk_space": 500, "geolocation": loc, "inet_down_cost": 0.001, "num_gpus": 1}
+    offers = [raw(1, "Bulgaria, BG", 0.30), raw(2, "Virginia, US", 0.45), raw(3, "Texas, US", 0.40)]
+    s = VastSettings(max_dph=1.0)
+    us = vast.search_offers(s, run=lambda a: _json.dumps(offers), limit=5)
+    assert [o.id for o in us] == [3, 2]  # US only, cheapest first, though BG is cheaper
+    s.regions = ["JP"]
+    assert [o.id for o in vast.search_offers(s, run=lambda a: _json.dumps(offers), limit=5)] == [1, 3, 2]  # fallback
+    s.regions = []
+    assert vast.search_offers(s, run=lambda a: _json.dumps(offers), limit=5)[0].id == 1
+    assert vast.country_of("North Carolina, US") == "US" and vast.country_of("") == ""
+
+
+def test_ranking_prefers_fast_hosts_and_avoids_failed_ones(tmp_path):
+    import json as _json
+
+    from tracktake import nethistory, vast
+    from tracktake.config import VastSettings
+
+    def raw(i, machine, loc, dph):
+        return {"id": i, "machine_id": machine, "gpu_name": "RTX 4090", "dph_total": dph, "reliability2": 0.99,
+                "inet_down": 900, "disk_space": 500, "geolocation": loc, "inet_down_cost": 0.001, "num_gpus": 1}
+    offers = [raw(1, 11, "Texas, US", 0.40), raw(2, 22, "Virginia, US", 0.41), raw(3, 33, "Ohio, US", 0.40)]
+    nethistory.HISTORY.write_text("\n".join(_json.dumps(r) for r in [
+        {"machine_id": 11, "location": "Texas, US", "measured_mb_s": 20.0},   # measured slow before
+        {"machine_id": 33, "location": "Ohio, US", "error": "SSH did not come up"},
+        {"machine_id": 33, "location": "Ohio, US", "error": "SSH did not come up"},
+    ]) + "\n")
+    nethistory._CACHE = None
+    s = VastSettings(max_dph=1.0, download_gb=44)
+    order = [o.id for o in vast.search_offers(s, run=lambda a: _json.dumps(offers), limit=5)]
+    assert order == [2, 1, 3]  # fast region first; the slow host next; the host that failed twice last
+    assert nethistory.region("Richmond, Virginia, US") == "us-east" and nethistory.region("Berlin, DE") == "eu"
+
+
+def test_destroy_treats_missing_instance_as_gone(tmp_path, monkeypatch):
+    from tracktake import vast
+
+    monkeypatch.setattr(vast, "STATE_DIR", tmp_path)
+    st = vast.State(123, 0.4, name="t-w1")
+    st.save()
+
+    def run(args):
+        raise vast.VastError("vastai destroy instance failed: Failed with error 404: Instance 123 not found.")
+    assert vast.destroy(st, run=run) >= 0 and not vast.state_path("t-w1").exists()
+
+    def broken(args):
+        raise vast.VastError("connection refused")
+    st.save()
+    import pytest
+
+    with pytest.raises(vast.VastError):
+        vast.destroy(st, run=broken)

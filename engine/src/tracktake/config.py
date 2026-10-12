@@ -35,7 +35,12 @@ class VastSettings(BaseModel):
     min_inet_down: int = 500
     max_download_cost: float = 0.006  # USD per GB downloaded; some hosts charge 10x more and models are ~60 GB
     download_gb: float = 60.0  # what provisioning downloads per instance, priced into each offer
-    min_download_mbs: float = 40.0  # measured Hugging Face speed below this (MB/s) -> drop the host, take the next
+    # country codes to rent in first; [] = anywhere. US hosts pulled the models 2-6x faster than European/Asian ones
+    # (measured 147-493 MB/s vs 14-92 MB/s). With no matching offer there, the search falls back to anywhere.
+    regions: list[str] = ["US"]
+    # measured Hugging Face speed below this (MB/s) -> drop the host, take the next; under 70 MB/s the ~41 GB of models
+    # take over 10 paid minutes
+    min_download_mbs: float = 70.0
     disk_gb: int = 120
     image: str = "pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime"
     comfy_repo: str = "https://github.com/comfyanonymous/ComfyUI"

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
-from tracktake import continuity, keyframes, storyboard
+from tracktake import continuity, keycheck, keyframes, storyboard
 from tracktake.jobs import Context, clip_progress
 from tracktake.models import Analysis
 from tracktake.project import Project
@@ -72,14 +73,25 @@ def run_character(ctx: Context, p: Project, force: bool = False) -> None:
     ctx.log(f"character sheet ready ({sec:.0f}s)" if sec else "character sheet already exists")
 
 
-def missing_keys(p: Project) -> int:
+def key_counts(p: Project) -> dict[str, int]:
+    """Codex keyframes of the project's orientation: missing ones, and stale ones (drawn before their scene, the
+    world bible or a keyframe they follow changed)."""
     sb = p.storyboard() or {"shots": []}
     o = p.meta().orientation
-    return sum(1 for s in sb["shots"] if not p.key_path("codex", s["id"], o).exists())
+    counts = {"missing": 0, "stale": 0, "ok": 0}
+    for status in keyframes.key_statuses(p, sb, o).values():
+        counts[status] += 1
+    return counts
+
+
+def missing_keys(p: Project) -> int:
+    """Keyframes to (re)draw before a render: missing + stale."""
+    c = key_counts(p)
+    return c["missing"] + c["stale"]
 
 
 def run_codex_keys(ctx: Context, p: Project, shots: list[str] | None = None, force: bool = False,
-                   workers: int = 4) -> None:
+                   workers: int = 8) -> None:
     orients = [p.meta().orientation]
     if not p.character_sheet.exists() and needs_character(p):
         ctx.log("no character sheet yet - drawing it first")
@@ -94,10 +106,43 @@ def run_codex_keys(ctx: Context, p: Project, shots: list[str] | None = None, for
         ctx.progress(done, len(todo))
         ctx.log(f"{job.out.name}: {result}")
 
-    keyframes.run_codex(p, todo, max(1, min(workers, 8)), on_done, ctx.cancelled)
+    # 8 parallel Codex runs: with 4, 63 keyframes took 32 min (each image ~92 s; the chains of continuous shots
+    # alone would allow ~15 min)
+    keyframes.run_codex(p, todo, max(1, min(workers, 12)), on_done, ctx.cancelled)
     failed = [j.out.name for j in todo if not j.out.exists()]
     if failed and not ctx.cancelled():
         raise RuntimeError(f"{len(failed)} keyframes failed: {', '.join(failed[:6])}")
+
+
+def keys_need_check(p: Project) -> bool:
+    """No keyframe check yet, or a keyframe drawn after the last one."""
+    o = p.meta().orientation
+    report = keycheck.report(p)
+    sb = p.storyboard() or {"shots": []}
+    keys = [p.key_path("codex", s["id"], o) for s in sb["shots"]]
+    newest = max((k.stat().st_mtime for k in keys if k.exists()), default=0.0)
+    if not newest:
+        return False
+    return not report or report.get("orientation") != o or datetime.fromisoformat(report["checked"]).timestamp() < newest
+
+
+def run_keys_check(ctx: Context, p: Project, redraw: bool = True, rounds: int = 3) -> None:
+    """Look at the drawn keyframes for visual continuity errors; flip mirrored ones and (with `redraw`) redraw the
+    others with the correction, then look at the flipped and redrawn ones again. Errors found in the last round stay
+    marked (stale, with the correction) for the next "generate missing and stale"."""
+    o = p.meta().orientation
+    shots: list[str] | None = None
+    for round_no in range(max(1, rounds)):
+        ctx.check()
+        issues = keycheck.check(p, o, shots, log=ctx.log)
+        done = keycheck.apply(p, issues, o, log=ctx.log, confirm_flip=keycheck.flip_checker(p, o, log=ctx.log))
+        again = done["redraw"] + done["flipped"] if redraw else done["flipped"]
+        if not again or round_no == rounds - 1:
+            return
+        if redraw and done["redraw"]:
+            ctx.log(f"redrawing {len(done['redraw'])} keyframe(s) with the corrections")
+            run_codex_keys(ctx, p)
+        shots = again
 
 
 def new_run_id() -> str:
@@ -115,7 +160,8 @@ def render_command(p: Project, kind: str, workers: int, gpu: str, gpus: int, max
     run_id = run_id or new_run_id()
     cmd = [sys.executable, "-m", "tracktake.cli", "remote", "run", "--full", p.full, "--set", kind, "--song", song,
            "--analysis", p.analysis_path, "--workers", str(max(1, min(workers, 8))), "--gpu", gpu,
-           "--max-dph", str(max_dph), "--gpus", str(max(1, gpus)), "--orient", p.meta().orientation, "--yes",
+           "--max-dph", str(max_dph), "--gpus", str(max(1, gpus)), "--region", m.region or "any",
+           "--orient", p.meta().orientation, "--yes",
            "--run-id", run_id]
     if not masters:
         cmd.append("--no-masters")

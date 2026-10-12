@@ -24,6 +24,7 @@ function VastChip({ onClick }: { onClick: () => void }) {
   const t = useT();
   if (!data) return null;
   const running = data.instances.length;
+  const gpuCount = data.instances.reduce((n, i) => n + (i.gpus ?? 1), 0);
   return (
     <button
       type="button"
@@ -33,7 +34,7 @@ function VastChip({ onClick }: { onClick: () => void }) {
     >
       <span className={`h-1.5 w-1.5 rounded-full ${data.configured ? (running ? "animate-pulse-dot bg-safe" : "bg-ok") : "bg-ink-500"}`} />
       vast {data.configured ? formatUsd(data.balance) : "—"}
-      {running > 0 && <span className="text-safe-hi">· {running} GPU</span>}
+      {running > 0 && <span className="text-safe-hi">· {gpuCount} GPU</span>}
     </button>
   );
 }

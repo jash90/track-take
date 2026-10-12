@@ -1,10 +1,14 @@
-import { memo } from "react";
-import type { KeySet, Orientation, Shot, ShotKeys } from "../../api/types";
+import { memo, type ReactNode } from "react";
+import type { KeyCheckKind, KeySet, Orientation, Shot, ShotKeys } from "../../api/types";
 import { Button } from "../../components/ui";
 import { cx } from "../../lib/cx";
 import { formatTime } from "../../lib/format";
 import { kindColor } from "../../lib/kinds";
 import { useT } from "../../i18n";
+import { KeyBadges, keyBorder } from "./stale";
+
+/** DOM id of a shot's row, for jumping to it from the check report. */
+export const keyRowId = (shotId: string) => `key-row-${shotId}`;
 
 export const SET_LABEL: Record<KeySet, string> = { codex: "Codex", comfy: "ComfyUI" };
 
@@ -17,15 +21,17 @@ interface Props {
   sets: KeySet[];
   orientation: Orientation;
   keys: Partial<Record<KeySet, ShotKeys | undefined>>;
+  /** error kind of this shot in the last keyframe check */
+  issueKind?: KeyCheckKind;
   onOpen: (shotId: string, set: KeySet) => void;
   onRegenerate: (shotId: string) => void;
   regenerating: boolean;
 }
 
-export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orientation, keys, onOpen, onRegenerate, regenerating }: Props) {
+export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orientation, keys, issueKind, onOpen, onRegenerate, regenerating }: Props) {
   const t = useT();
   return (
-    <li className="grid grid-cols-[180px_minmax(0,1fr)] gap-5 border-b border-ink-800 py-4 [content-visibility:auto] [contain-intrinsic-size:auto_190px] last:border-b-0">
+    <li id={keyRowId(shot.id)} className="grid scroll-mt-6 grid-cols-[180px_minmax(0,1fr)] gap-5 border-b border-ink-800 py-4 [content-visibility:auto] [contain-intrinsic-size:auto_190px] last:border-b-0">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-baseline gap-2">
           <span className="font-display text-3xl leading-none">{shot.id}</span>
@@ -69,6 +75,8 @@ export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orient
                 full={k?.[orientation]}
                 className={orientation === "landscape" ? "h-[146px] w-[260px]" : "h-[214px] w-[120px]"}
                 label={`${shot.id} ${SET_LABEL[set]} ${orientation === "landscape" ? "16:9" : "9:16"}`}
+                badges={set === "codex" ? <KeyBadges k={k} orientation={orientation} kind={issueKind} /> : null}
+                border={set === "codex" ? keyBorder(k, orientation) : null}
                 onOpen={() => onOpen(shot.id, set)}
               />
             </div>
@@ -79,7 +87,15 @@ export const KeyRow = memo(function KeyRow({ shot, cut, dependents, sets, orient
   );
 });
 
-function Thumb({ src, full, className, label, onOpen }: { src?: string | null; full?: string | null; className: string; label: string; onOpen: () => void }) {
+function Thumb({ src, full, className, label, badges, border, onOpen }: {
+  src?: string | null;
+  full?: string | null;
+  className: string;
+  label: string;
+  badges: ReactNode;
+  border: string | null;
+  onOpen: () => void;
+}) {
   const img = src ?? full;
   const t = useT();
   if (!img) {
@@ -94,8 +110,9 @@ function Thumb({ src, full, className, label, onOpen }: { src?: string | null; f
       type="button"
       onClick={onOpen}
       aria-label={t("common.enlarge", { label })}
-      className={cx(className, "group overflow-hidden rounded-md border border-ink-700 bg-ink-900 transition-colors hover:border-safe")}
+      className={cx(className, "group relative overflow-hidden rounded-md border bg-ink-900 transition-colors hover:border-safe", border ?? "border-ink-700")}
     >
+      {badges}
       <img src={img} alt={label} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
     </button>
   );

@@ -36,7 +36,11 @@ Find real continuity errors and fix them:
   without a reason; a broken window is whole again; furniture appears or vanishes);
 - inside a CONTINUES run: changed time of day, weather, clothes, hair, what she holds, or where she is, without the
   previous shot's motion causing it;
-- the character's look contradicting the main character description.
+- the character's look contradicting the main character description;
+- screen directions: when a side matters (who drives, where the lamps or the window are) the scene must state it in
+  frame terms that fit the camera angle and the world's fixed layout (seen from the front, the driver of a
+  left-hand-drive car is on the RIGHT of the frame; from behind on the left). Fix scenes that leave it ambiguous after
+  the camera turns around, or that put it on the wrong side.
 Do NOT report style choices, intentional story changes that the scenes make explicit, or dream/memory scenes that
 say so. For every real error return the shot id, the problem in one sentence, and the corrected `scene` and `motion`
 (change as little as possible, keep the same shot idea). Return an empty list when everything is consistent."""

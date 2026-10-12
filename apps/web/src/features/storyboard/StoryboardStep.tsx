@@ -7,7 +7,7 @@ import type { KeySet, Storyboard } from "../../api/types";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import { useToast } from "../../components/Toaster";
-import { Button, Empty, NextStepLink, ErrorBox, InlineError, Loading, ProgressBar, StepHeader } from "../../components/ui";
+import { Button, Empty, NextStepLink, ErrorBox, InlineError, Loading, StepHeader } from "../../components/ui";
 import { errorMessage } from "../../lib/format";
 import { projectOrientation } from "../../lib/orientation";
 import { continuitySummary } from "../../lib/continuity";
@@ -18,8 +18,11 @@ import { Timeline } from "./Timeline";
 import { useAudioTransport } from "./useAudioTransport";
 import { useStoryboardDraft } from "./useStoryboardDraft";
 import { Trans, useT } from "../../i18n";
-import { jobTitle } from "../jobs/jobTitle";
 import { shotLightbox } from "./shotLightbox";
+import { Monitor } from "./Monitor";
+import { useFollowPlayhead } from "./useFollowPlayhead";
+import { StoryboardBanners } from "./StoryboardBanners";
+import { checkKinds, isStale } from "../keys/stale";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
@@ -54,6 +57,12 @@ export function StoryboardStep() {
     if (!primary && shots[0]) setPrimary(shots[0].id);
   }, [primary, shots]);
 
+  // while playing with "follow" on, the editor follows the playhead — unless it holds unsaved edits
+  const [follow, setFollow] = useState(true);
+  useFollowPlayhead(transport, shots, follow, dirty, (sid) => {
+    setPrimary(sid);
+    setSelected(new Set([sid]));
+  });
   const locationNames = useMemo(() => Object.fromEntries((draft?.locations ?? []).map((l) => [l.id, l.name])), [draft?.locations]);
   const thumbs = useMemo(() => {
     const out: Record<string, string | null> = {};
@@ -62,6 +71,11 @@ export function StoryboardStep() {
     for (const s of shots) out[s.id] = sets?.codex?.[s.id]?.[thumbKey] ?? sets?.comfy?.[s.id]?.[thumbKey] ?? null;
     return out;
   }, [keysQ.data, shots, orientation]);
+  const staleIds = useMemo(
+    () => new Set(shots.filter((s) => isStale(keysQ.data?.sets.codex?.[s.id], orientation)).map((s) => s.id)),
+    [keysQ.data, shots, orientation],
+  );
+  const issueKinds = useMemo(() => checkKinds(keysQ.data), [keysQ.data]);
 
   const pick = useCallback((sid: string, additive: boolean) => {
     setPrimary(sid);
@@ -106,11 +120,18 @@ export function StoryboardStep() {
     return () => window.removeEventListener("keydown", onKey);
   }, [transport, step]);
 
+  // an edited scene / world look marks drawn keyframes stale — refresh their badges and the render estimate
+  const refreshKeys = () => {
+    void qc.invalidateQueries({ queryKey: qk.keys(id) });
+    void qc.invalidateQueries({ queryKey: ["project", id, "estimate"] });
+  };
+
   const persist = async (doc: Storyboard | null) => {
     if (!doc || !dirty) return;
     const saved = await api.saveStoryboard(id, doc);
     adopt(saved);
     qc.setQueryData(qk.storyboard(id), saved);
+    refreshKeys();
   };
 
   const save = useMutation({
@@ -130,6 +151,7 @@ export function StoryboardStep() {
       adopt(doc);
       qc.setQueryData(qk.storyboard(id), doc);
       void qc.invalidateQueries({ queryKey: qk.project(id) });
+      refreshKeys();
       setConfirmPlan(false);
       toast(t("sb.plannedToast", { count: doc.shots.length }), "ok");
     },
@@ -199,22 +221,7 @@ export function StoryboardStep() {
       </StepHeader>
       <InlineError error={save.error ?? plan.error ?? write.error ?? (noStoryboard ? null : sbQ.error)} />
 
-      {writing && (
-        <div className="mb-4 rounded-xl border border-safe/40 bg-safe/[0.05] px-5 py-3">
-          <div className="flex items-center justify-between gap-4 text-sm">
-            <span>{t("sb.writingBanner", { title: jobTitle(writing, t) })}</span>
-            <span className="truncate font-mono text-[0.75rem] text-ink-400">{writing.message}</span>
-          </div>
-          {writing.progress && <ProgressBar className="mt-2" value={writing.progress.done} total={writing.progress.total} />}
-        </div>
-      )}
-      {stale && (
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-warn/40 bg-warn/[0.06] px-4 py-2 text-sm">
-          <span>{t("sb.stale")}</span>
-          <Button size="sm" variant="ghost" onClick={discard}>{t("sb.loadServer")}</Button>
-        </div>
-      )}
-
+      <StoryboardBanners writing={writing} stale={stale} onLoadServer={discard} />
       <Timeline
         duration={analysis.data.duration}
         peaks={peaks.data?.peaks}
@@ -224,7 +231,10 @@ export function StoryboardStep() {
         primary={primary}
         onPick={pickAndSeek}
         thumbs={thumbs}
+        staleIds={staleIds}
         locationNames={locationNames}
+        follow={follow}
+        onFollow={setFollow}
         transport={transport}
       />
       {peaks.isError && <p className="mt-2 text-[0.75rem] text-err">{t("sb.peaksError", { error: errorMessage(peaks.error) })}</p>}
@@ -237,12 +247,23 @@ export function StoryboardStep() {
               {t("sb.emptyBody")}
             </Empty>
           )}
+          {draft && shots.length > 0 && (
+            <Monitor
+              shots={shots}
+              lines={analysis.data.lines}
+              keys={keysQ.data}
+              orientation={orientation}
+              transport={transport}
+              editorHeld={follow && transport.playing && dirty}
+            />
+          )}
           {shot && (
             <ShotEditor
               shot={shot}
               index={primaryIdx}
               total={shots.length}
               keys={{ codex: keysQ.data?.sets.codex?.[shot.id], comfy: keysQ.data?.sets.comfy?.[shot.id] }}
+              issueKind={issueKinds[shot.id]}
               orientation={orientation}
               world={{ locations: draft?.locations ?? [], props: draft?.props ?? [] }}
               disabled={!!writing}
@@ -276,7 +297,6 @@ export function StoryboardStep() {
       </div>
 
       {draft && <NextStepLink to="../klatki" />}
-
       <ConfirmDialog
         open={confirmPlan}
         title={t("sb.planTitle")}

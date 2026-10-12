@@ -73,6 +73,9 @@ def _vast_settings(args: argparse.Namespace):
         s.max_dph = args.max_dph
     if getattr(args, "gpus", None):
         s.gpus = args.gpus
+    region = getattr(args, "region", None)
+    if region:
+        s.regions = [] if region.lower() == "any" else [r.strip().upper() for r in region.split(",") if r.strip()]
     return s
 
 
@@ -204,7 +207,7 @@ def _remote_settings(args: argparse.Namespace, models: list[str]):
     return s
 
 
-SETUP_H = 0.17  # boot + image + pip + model download per card (measured 9-13 min)
+SETUP_H = 0.17  # fallback only: setup now comes from nethistory (region boot + install/models), 5-11 min measured
 CLIP_S = 55.0  # Wan 2.2 14B, up to 81 frames, 832x480 on an RTX 4090 (measured: 45 clips in 2454 s, 2026-10-12)
 # one format, 4:29 song: 9 min measured as one process; now chunks render in parallel while the clips are still
 # generating, leaving ~3 min after the last clip (estimate, to verify on the next run)
@@ -212,22 +215,25 @@ RENDER_H = 0.03  # measured: chunks render alongside the clips, 109 s left after
 # Wan clip speed relative to an RTX 4090.
 # Measured only; other cards are estimated from Vast's DLPerf (vast.gpu_catalog) until measured with bench_vast.py.
 GPU_SPEED = {
-    "RTX_4090": 1.0,  # 45 clips in 2454 s (2026-10-12)
-    "H100_NVL": 1.9,  # 45 clips in 1290 s (2026-10-12)
+    "RTX_4090": 1.0,  # 3505 frames in 2454 s = 0.70 s/frame (2026-10-12)
+    "H100_NVL": 1.9,  # 3505 frames in 1290 s (2026-10-12)
+    "RTX_PRO_6000_S": 1.6,  # 3635 frames in 2 x 793 GPU-seconds (2026-10-12, 2-GPU machine)
 }
+FRAME_S = 0.70  # Wan 2.2 14B at 832x480 on an RTX 4090, per generated frame: clip time follows the clip length
 
 
-_CATALOG: tuple[float, list[dict]] | None = None
+_CATALOG: dict[tuple, tuple[float, list[dict]]] = {}
 
 
 def gpu_catalog(s, max_age: float = 300) -> list[dict]:
-    """vast.gpu_catalog, cached for a few minutes (one search is ~2 s)."""
-    global _CATALOG
+    """vast.gpu_catalog, cached for a few minutes per region choice (one search is ~2 s)."""
     from . import vast
 
-    if _CATALOG is None or time.monotonic() - _CATALOG[0] > max_age:
-        _CATALOG = (time.monotonic(), vast.gpu_catalog(s, GPU_SPEED))
-    return _CATALOG[1]
+    key = tuple(sorted(r.upper() for r in s.regions))
+    hit = _CATALOG.get(key)
+    if hit is None or time.monotonic() - hit[0] > max_age:
+        hit = _CATALOG[key] = (time.monotonic(), vast.gpu_catalog(s, GPU_SPEED))
+    return hit[1]
 
 
 def gpu_speed(gpu: str) -> float:
@@ -242,8 +248,12 @@ def gpu_speed(gpu: str) -> float:
         return 1.0
 
 
+FIXED_H = 3 / 60  # worker preparation (~0.6 min) + downloading the finished video (~2.3 min), measured
+FAILED_HOST_MIN = 10  # a host that never starts holds its slot up to ~10 min before a spare offer takes over
+
+
 def _estimate(s, workers: int, clips: int, render: bool = True, extra_minutes: float = 0.0,
-              formats: int = 2) -> tuple[float, float]:
+              formats: int = 2, frames: int | None = None) -> tuple[float, float]:
     """(wall hours, USD). Every card pays setup + model download once; the clip work is the same total whatever
     the card count; followers are released after handing over their clips, each format renders on one card."""
     from . import vast
@@ -251,12 +261,17 @@ def _estimate(s, workers: int, clips: int, render: bool = True, extra_minutes: f
     offers = vast.search_offers(s, limit=max(workers, 1))
     if not offers:
         return 0.0, 0.0
+    from . import nethistory
+
     dph = sum(o.dph for o in offers) / len(offers)
     dl = sum(o.setup_cost(s.download_gb) for o in offers) / len(offers)
-    work_h = clips * CLIP_S / gpu_speed(s.gpu) / 3600 / max(1, s.gpus) + extra_minutes / 60  # host-hours
+    hist = nethistory.history()
+    setup_h = sum(hist.setup_minutes(o.machine_id, o.location, s.download_gb) for o in offers) / len(offers) / 60
+    gpu_s = frames * FRAME_S if frames else clips * CLIP_S  # on an RTX 4090
+    work_h = gpu_s / gpu_speed(s.gpu) / 3600 / max(1, s.gpus) + extra_minutes / 60  # host-hours
     render_wall = RENDER_H * math.ceil(formats / min(workers, formats)) if render else 0.0
-    wall = SETUP_H + work_h / workers + render_wall
-    usd = workers * (SETUP_H * dph + dl) + work_h * dph + (formats * RENDER_H * dph if render else 0.0)
+    wall = setup_h + work_h / workers + render_wall + FIXED_H
+    usd = workers * (setup_h * dph + dl) + work_h * dph + (formats * RENDER_H * dph if render else 0.0) + FIXED_H * dph
     return wall, usd
 
 
@@ -309,7 +324,14 @@ def cmd_remote(args: argparse.Namespace) -> int:
         if args.keep:
             print("--keep: workers left running; `tracktake vast down --all` stops billing")
         else:
-            total = sum(vast.destroy(st) for st in vast.all_states() if st.name.startswith(run_id))
+            total, failed = 0.0, []
+            for st in [st for st in vast.all_states() if st.name.startswith(run_id)]:
+                try:  # one failure must not leave the other cards running
+                    total += vast.destroy(st)
+                except Exception as e:  # noqa: BLE001
+                    failed.append(f"{st.name} ({st.instance_id}): {e}")
+            if failed:
+                print("COULD NOT FREE: " + "; ".join(failed) + " - run `tracktake vast down --all`")
             print(f"freed this job's workers (~${total:.2f} by local estimate; see `vastai show invoices` for the bill)")
 
 
@@ -378,6 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="run: which video to make (a project has one orientation)")
     r.add_argument("--gpu", help="override [vast].gpu")
     r.add_argument("--gpus", type=int, help="GPUs per host (one ComfyUI per GPU, one model download)")
+    r.add_argument("--region", help="country codes to rent in first, e.g. US or US,CA; 'any' = anywhere")
     r.add_argument("--max-dph", type=float, help="override [vast].max_dph")
     r.add_argument("--no-masters", action="store_true", help="run: download only the small previews")
     r.add_argument("--no-captions", action="store_true", help="run: video without karaoke lyrics")
